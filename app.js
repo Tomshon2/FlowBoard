@@ -21,6 +21,8 @@ const ticketColors = [
   "#ffffff", "#d9f99d", "#a7f3d0", "#bae6fd", "#c7d2fe", "#fecaca",
   "#fef3c7", "#e5e7eb", "#1d2733"
 ];
+const DEFAULT_CONNECTION_COLOR = "#172033";
+const DEFAULT_CONNECTION_THICKNESS = 3;
 
 const timePlan = [
   {
@@ -85,6 +87,7 @@ const timePlan = [
 
 const defaultState = {
   activeProjectId: "project-1",
+  boardTheme: "light",
   projects: [
     {
       id: "project-1",
@@ -137,9 +140,16 @@ const taskTitle = document.querySelector("#task-title");
 const tasksList = document.querySelector("#tasks-list");
 const taskCount = document.querySelector("#task-count");
 const imageInput = document.querySelector("#image-input");
+const shapeType = document.querySelector("#shape-type");
+const addShapeBtn = document.querySelector("#add-shape-btn");
+const boardThemeBtn = document.querySelector("#board-theme-btn");
 const projectHours = document.querySelector("#project-hours");
 const hoursTotalLabel = document.querySelector("#hours-total-label");
 const hoursTable = document.querySelector("#hours-table");
+const connectionStylePanel = document.querySelector("#connection-style-panel");
+const connectionColor = document.querySelector("#connection-color");
+const connectionThickness = document.querySelector("#connection-thickness");
+const connectionThicknessLabel = document.querySelector("#connection-thickness-label");
 const hoursPanel = document.querySelector("#hours-panel");
 const tasksPanel = document.querySelector("#tasks-panel");
 const toggleHours = document.querySelector("#toggle-hours");
@@ -193,7 +203,11 @@ projectForm.addEventListener("submit", (event) => {
   saveAndRender();
 });
 
-document.querySelector("#add-ticket-btn").addEventListener("click", () => addBoardItem("ticket"));
+addShapeBtn.addEventListener("click", () => addSelectedShape());
+boardThemeBtn.addEventListener("click", toggleBoardTheme);
+connectionStylePanel.addEventListener("pointerdown", (event) => event.stopPropagation());
+connectionColor.addEventListener("input", (event) => updateSelectedConnections({ color: event.target.value }));
+connectionThickness.addEventListener("input", (event) => updateSelectedConnections({ thickness: Number(event.target.value) }));
 
 imageInput.addEventListener("change", (event) => {
   const file = event.target.files[0];
@@ -417,16 +431,25 @@ function loadState() {
 }
 
 function normalizeState() {
+  state.boardTheme = state.boardTheme === "dark" ? "dark" : "light";
   state.projects.forEach((project) => {
     project.totalHours ??= project.timerMinutes ? project.timerMinutes / 60 : 40;
     project.connections ??= [];
+    project.connections = project.connections.map((connection) => ({
+      color: DEFAULT_CONNECTION_COLOR,
+      thickness: DEFAULT_CONNECTION_THICKNESS,
+      manualBend: false,
+      ...connection,
+      thickness: clamp(Number(connection.thickness) || DEFAULT_CONNECTION_THICKNESS, 1, 14)
+    }));
     project.items = (project.items || []).map((item) => ({
       ...item,
       type: item.type === "note" ? "ticket" : item.type,
+      shape: item.shape || "circle",
       color: item.color || ticketColors[0],
       html: item.html || escapeHtml(item.text || ""),
-      width: item.width || (item.type === "image" ? 260 : 210),
-      height: item.height || (item.type === "image" ? 220 : 140)
+      width: item.width || (item.type === "image" ? 260 : item.type === "shape" ? 140 : 210),
+      height: item.height || (item.type === "image" ? 220 : item.type === "shape" ? 140 : 140)
     }));
   });
 }
@@ -471,12 +494,51 @@ function getActiveProject() {
 }
 
 function render() {
+  renderBoardTheme();
   renderProjects();
   renderWorkspace();
   renderTasks();
   renderHours();
   renderZoom();
+  renderConnectionStylePanel();
   syncDrawerButtons();
+}
+
+function renderBoardTheme() {
+  board.classList.toggle("board-dark", state.boardTheme === "dark");
+  boardThemeBtn.textContent = state.boardTheme === "dark" ? "Fundo branco" : "Fundo preto";
+}
+
+function renderConnectionStylePanel() {
+  const project = getActiveProject();
+  const selectedConnection = project?.connections.find((connection) => selectedConnectionIds.has(connection.id));
+  connectionStylePanel.classList.toggle("hidden", !selectedConnection);
+  if (!selectedConnection) return;
+
+  connectionColor.value = normalizeHexColor(selectedConnection.color || DEFAULT_CONNECTION_COLOR);
+  connectionThickness.value = String(selectedConnection.thickness || DEFAULT_CONNECTION_THICKNESS);
+  connectionThicknessLabel.textContent = `${selectedConnection.thickness || DEFAULT_CONNECTION_THICKNESS}px`;
+}
+
+function updateSelectedConnections(style) {
+  const project = getActiveProject();
+  if (!project || !selectedConnectionIds.size) return;
+
+  project.connections.forEach((connection) => {
+    if (!selectedConnectionIds.has(connection.id)) return;
+    if (style.color) connection.color = style.color;
+    if (style.thickness) connection.thickness = clamp(style.thickness, 1, 14);
+  });
+
+  connectionThicknessLabel.textContent = `${connectionThickness.value}px`;
+  connectionsLayer.innerHTML = "";
+  renderConnections(project);
+  saveState();
+}
+
+function toggleBoardTheme() {
+  state.boardTheme = state.boardTheme === "dark" ? "light" : "dark";
+  saveAndRender();
 }
 
 function renderProjects() {
@@ -552,7 +614,7 @@ function renderWorkspace() {
     node.style.top = `${item.y}px`;
     node.style.width = `${item.width}px`;
     node.style.height = `${item.height}px`;
-    node.style.background = item.type === "ticket" ? item.color : "#ffffff";
+    node.style.background = item.type === "ticket" ? item.color : item.type === "image" ? "#ffffff" : "transparent";
     node.dataset.id = item.id;
     node.classList.toggle("multi-selected", selectedItemIds.has(item.id));
     node.addEventListener("pointerdown", (event) => {
@@ -717,21 +779,28 @@ function renderWorkspace() {
       node.append(img);
     }
 
-    const text = document.createElement("div");
-    text.className = `item-text ${item.type === "image" ? "image-caption" : ""}`;
-    text.contentEditable = "true";
-    text.dataset.placeholder = item.type === "ticket" ? "Descreve o board" : "Escreve uma legenda";
-    text.innerHTML = item.type === "ticket" ? (item.html || escapeHtml(item.text || "")) : escapeHtml(item.text || "");
-    text.addEventListener("pointerdown", (event) => {
-      selectedBoardItemId = item.id;
-      event.stopPropagation();
-    });
-    text.addEventListener("input", () => {
-      item.html = sanitizeEditableHtml(text.innerHTML);
-      item.text = text.textContent;
-      saveState();
-    });
-    node.append(text);
+    if (item.type === "shape") {
+      const shape = document.createElement("div");
+      shape.className = `shape-visual shape-${item.shape || "circle"}`;
+      shape.style.setProperty("--shape-color", item.color || ticketColors[0]);
+      node.append(shape);
+    } else {
+      const text = document.createElement("div");
+      text.className = `item-text ${item.type === "image" ? "image-caption" : ""}`;
+      text.contentEditable = "true";
+      text.dataset.placeholder = item.type === "ticket" ? "Descreve o board" : "Escreve uma legenda";
+      text.innerHTML = item.type === "ticket" ? (item.html || escapeHtml(item.text || "")) : escapeHtml(item.text || "");
+      text.addEventListener("pointerdown", (event) => {
+        selectedBoardItemId = item.id;
+        event.stopPropagation();
+      });
+      text.addEventListener("input", () => {
+        item.html = sanitizeEditableHtml(text.innerHTML);
+        item.text = text.textContent;
+        saveState();
+      });
+      node.append(text);
+    }
 
     const resizeGrip = document.createElement("div");
     resizeGrip.className = "resize-grip";
@@ -769,29 +838,34 @@ function createConnectionDots(item) {
 function renderConnections(project) {
   const ticketMap = new Map(project.items.map((item) => [item.id, item]));
   project.connections = project.connections.filter((connection) => ticketMap.has(connection.from) && ticketMap.has(connection.to));
-  ensureArrowMarker();
-
   project.connections.forEach((connection) => {
     const from = ticketMap.get(connection.from);
     const to = ticketMap.get(connection.to);
     if (!from || !to) return;
 
     const selectedConnection = selectedConnectionIds.has(connection.id);
+    const connectionColorValue = connection.color || DEFAULT_CONNECTION_COLOR;
+    const connectionThicknessValue = Number(connection.thickness) || DEFAULT_CONNECTION_THICKNESS;
+    const markerId = ensureArrowMarker(`arrow-head-${connection.id}`, connectionColorValue);
     const route = getConnectionRoute(connection, from, to);
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
     path.setAttribute("d", route.path);
     path.setAttribute("class", `connection-line ${selectedConnection ? "selected-connection" : ""}`);
     path.dataset.id = connection.id;
-    path.setAttribute("marker-end", "url(#arrow-head)");
+    path.setAttribute("marker-end", `url(#${markerId})`);
+    path.style.stroke = connectionColorValue;
+    path.style.strokeWidth = String(selectedConnection ? connectionThicknessValue + 2 : connectionThicknessValue);
     path.addEventListener("pointerdown", (event) => event.stopPropagation());
     path.addEventListener("click", (event) => handleConnectionSelection(event, connection.id));
     connectionsLayer.append(path);
 
     const fromHandle = createConnectionEndpoint(route.start.x, route.start.y, `connection-endpoint from-endpoint ${selectedConnection ? "selected-connection-control" : ""}`);
+    fromHandle.style.stroke = connectionColorValue;
     fromHandle.addEventListener("pointerdown", (event) => startConnectionEndpointDrag(event, project, connection, from, "fromSide"));
     connectionsLayer.append(fromHandle);
 
     const toHandle = createConnectionEndpoint(route.end.x, route.end.y, `connection-endpoint to-endpoint ${selectedConnection ? "selected-connection-control" : ""}`);
+    toHandle.style.stroke = connectionColorValue;
     toHandle.addEventListener("pointerdown", (event) => startConnectionEndpointDrag(event, project, connection, to, "toSide"));
     connectionsLayer.append(toHandle);
 
@@ -800,6 +874,7 @@ function renderConnections(project) {
     handle.setAttribute("cy", String(route.handleY));
     handle.setAttribute("r", "8");
     handle.setAttribute("class", `connection-handle ${selectedConnection ? "selected-connection-control" : ""}`);
+    handle.style.stroke = connectionColorValue;
     handle.addEventListener("pointerdown", (event) => startConnectionBendDrag(event, project, connection));
     connectionsLayer.append(handle);
   });
@@ -814,11 +889,15 @@ function createConnectionEndpoint(x, y, className) {
   return handle;
 }
 
-function ensureArrowMarker() {
-  if (connectionsLayer.querySelector("#arrow-head")) return;
+function ensureArrowMarker(id = "arrow-head", color = DEFAULT_CONNECTION_COLOR) {
+  const existingMarker = document.getElementById(id);
+  if (existingMarker) {
+    existingMarker.querySelector("path")?.setAttribute("fill", color);
+    return id;
+  }
   const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
   const marker = document.createElementNS("http://www.w3.org/2000/svg", "marker");
-  marker.setAttribute("id", "arrow-head");
+  marker.setAttribute("id", id);
   marker.setAttribute("viewBox", "0 0 10 10");
   marker.setAttribute("refX", "9");
   marker.setAttribute("refY", "5");
@@ -827,9 +906,11 @@ function ensureArrowMarker() {
   marker.setAttribute("orient", "auto-start-reverse");
   const arrow = document.createElementNS("http://www.w3.org/2000/svg", "path");
   arrow.setAttribute("d", "M 0 0 L 10 5 L 0 10 z");
+  arrow.setAttribute("fill", color);
   marker.append(arrow);
   defs.append(marker);
   connectionsLayer.append(defs);
+  return id;
 }
 
 function getConnectionRoute(connection, from, to) {
@@ -852,7 +933,9 @@ function getConnectionRoute(connection, from, to) {
   const startHorizontal = startDirection.x !== 0;
   connection.bendAxis = startHorizontal ? "x" : "y";
   connection.bend ??= getDefaultConnectionBend(connection, { items: [from, to] });
-  connection.bend = getSafeConnectionBend(connection.bendAxis, connection.bend, from, to, startStub, endStub);
+  connection.bend = connection.manualBend
+    ? clamp(connection.bend, 0, connection.bendAxis === "x" ? 6400 : 4200)
+    : getSafeConnectionBend(connection.bendAxis, connection.bend, from, to, startStub, endStub);
 
   let path;
   let handleX;
@@ -1030,10 +1113,15 @@ function startConnectionEndpointDrag(event, project, connection, item, key) {
   event.preventDefault();
   event.stopPropagation();
   interactionLock = true;
+  selectedConnectionIds = new Set([connection.id]);
+  selectedItemIds.clear();
+  selectedBoardItemId = null;
+  renderConnectionStylePanel();
 
   const move = (moveEvent) => {
     const point = getBoardPoint(moveEvent);
     connection[key] = getClosestSide(item, point);
+    connection.manualBend = false;
     connection.bend = getDefaultConnectionBend(connection, project);
     connectionsLayer.innerHTML = "";
     renderConnections(project);
@@ -1069,6 +1157,10 @@ function startConnectionBendDrag(event, project, connection) {
   event.preventDefault();
   event.stopPropagation();
   interactionLock = true;
+  selectedConnectionIds = new Set([connection.id]);
+  selectedItemIds.clear();
+  selectedBoardItemId = null;
+  renderConnectionStylePanel();
   const from = project.items.find((item) => item.id === connection.from);
   const to = project.items.find((item) => item.id === connection.to);
 
@@ -1087,10 +1179,11 @@ function startConnectionBendDrag(event, project, connection) {
       x: end.x + endDirection.x * 36,
       y: end.y + endDirection.y * 36
     };
+    connection.manualBend = true;
     if (connection.bendAxis === "x") {
-      connection.bend = getSafeConnectionBend("x", Math.max(0, Math.round(point.x)), from, to, startStub, endStub);
+      connection.bend = clamp(Math.round(point.x), 0, 6400);
     } else {
-      connection.bend = getSafeConnectionBend("y", Math.max(0, Math.round(point.y)), from, to, startStub, endStub);
+      connection.bend = clamp(Math.round(point.y), 0, 4200);
     }
     connectionsLayer.innerHTML = "";
     renderConnections(project);
@@ -1167,18 +1260,35 @@ function renderHours() {
   });
 }
 
+function addSelectedShape() {
+  const selected = shapeType.value;
+  if (selected === "ticket") {
+    addBoardItem("ticket");
+    return;
+  }
+  addBoardItem("shape", {
+    shape: selected,
+    width: selected === "triangle" ? 150 : 140,
+    height: 140,
+    color: ticketColors[(getActiveProject()?.items.length || 0) % ticketColors.length],
+    text: selected
+  });
+}
+
 function addBoardItem(type, extra = {}) {
   const project = getActiveProject();
   if (!project) return;
+  const isShape = type === "shape";
   project.items.push({
     id: crypto.randomUUID(),
     type,
     x: extra.x ?? (96 + project.items.length * 22),
     y: extra.y ?? (86 + project.items.length * 18),
-    width: type === "image" ? 260 : 230,
+    width: type === "image" ? 260 : isShape ? 140 : 230,
     height: type === "image" ? 220 : 140,
     text: type === "ticket" ? "Novo board" : "",
     html: type === "ticket" ? "Novo board" : "",
+    shape: isShape ? "circle" : undefined,
     color: ticketColors[project.items.length % ticketColors.length],
     ...extra
   });
@@ -1665,7 +1775,17 @@ function createConnection(fromId, toId, from, to, forcedFromSide, forcedToSide) 
   const fromSide = forcedFromSide || getAutoSide(fromCenter, toCenter);
   const toSide = forcedToSide || getAutoSide(toCenter, fromCenter);
   const bendAxis = ["left", "right"].includes(fromSide) ? "x" : "y";
-  const connection = { id: crypto.randomUUID(), from: fromId, to: toId, fromSide, toSide, bendAxis };
+  const connection = {
+    id: crypto.randomUUID(),
+    from: fromId,
+    to: toId,
+    fromSide,
+    toSide,
+    bendAxis,
+    color: DEFAULT_CONNECTION_COLOR,
+    thickness: DEFAULT_CONNECTION_THICKNESS,
+    manualBend: false
+  };
   connection.bend = getDefaultConnectionBend(connection, { items: [from, to] });
   return connection;
 }
@@ -1775,6 +1895,7 @@ function handleConnectionSelection(event, id) {
   renderSelectionClasses();
   connectionsLayer.innerHTML = "";
   renderConnections(getActiveProject());
+  renderConnectionStylePanel();
 }
 
 function renderSelectionClasses() {
@@ -1797,6 +1918,7 @@ function clearSelection() {
   });
   connectionsLayer.innerHTML = "";
   renderConnections(getActiveProject());
+  renderConnectionStylePanel();
 }
 
 function handleGlobalKeydown(event) {

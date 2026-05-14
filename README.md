@@ -12,6 +12,18 @@ Uma primeira versao de uma webapp privada para equipas pequenas gerirem projetos
 
 Abre o ficheiro `index.html` diretamente no browser.
 
+Se o browser bloquear alguma coisa por estar a abrir ficheiros locais, corre um servidor local na pasta:
+
+```text
+python -m http.server 5177 --bind 127.0.0.1
+```
+
+Depois abre:
+
+```text
+http://localhost:5177/
+```
+
 Codigo de acesso atual:
 
 ```text
@@ -102,6 +114,10 @@ O `WORKSPACE_ID` esta na tabela `workspaces`.
 - O quadro tem uma borda a marcar o limite da area de trabalho.
 - Para ligar boards, passa o rato sobre um board e arrasta uma das bolinhas de ligacao ate outro board.
 - As bolinhas de ligacao aparecem apenas ao passar o rato perto de um board ou durante uma ligacao.
+- Clica numa ligacao para mudar a cor e a espessura.
+- O meio das ligacoes continua a poder ser arrastado para ajustar o caminho manualmente.
+- O topo tem um seletor para adicionar boards, circulos, triangulos e hexagonos.
+- O quadro pode alternar entre fundo claro e fundo preto.
 - As ligacoes fazem angulos de 90 graus e tem um ponto que podes arrastar para ajustar o caminho.
 - As areas `Horas do projeto` e `Task list` podem ser encolhidas/abertas pela seta.
 - As gavetas laterais desaparecem para dar mais espaco ao quadro e abrem por botoes com icones.

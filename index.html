@@ -76,13 +76,33 @@
               Importar imagem
               <input id="image-input" type="file" accept="image/*" />
             </label>
-            <button id="add-ticket-btn">Adicionar board</button>
+            <div class="shape-picker">
+              <select id="shape-type" aria-label="Tipo de elemento">
+                <option value="ticket">Board</option>
+                <option value="circle">Circulo</option>
+                <option value="triangle">Triangulo</option>
+                <option value="hexagon">Hexagono</option>
+              </select>
+              <button id="add-shape-btn" type="button">Adicionar</button>
+            </div>
+            <button id="board-theme-btn" class="ghost-button" type="button">Fundo preto</button>
           </div>
         </header>
 
         <div id="board" class="board" aria-label="Quadro visual">
           <div id="board-content" class="board-content">
             <svg id="connections-layer" class="connections-layer" aria-hidden="true"></svg>
+          </div>
+          <div id="connection-style-panel" class="connection-style-panel hidden">
+            <label>
+              Cor
+              <input id="connection-color" type="color" value="#172033" />
+            </label>
+            <label>
+              Espessura
+              <input id="connection-thickness" type="range" min="1" max="14" step="1" value="3" />
+            </label>
+            <span id="connection-thickness-label">3px</span>
           </div>
           <div id="zoom-indicator" class="zoom-indicator">100%</div>
         </div>
