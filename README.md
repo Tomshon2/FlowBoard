@@ -96,12 +96,12 @@ O `WORKSPACE_ID` esta na tabela `workspaces`.
 - Nas pontas das ligacoes ha pontos que podes arrastar para mudar o lado por onde a linha entra/sai do board.
 - Ao trocar de projeto, o tamanho atual dos boards e guardado antes de mudar.
 - Usa `Shift` + clique/pressionar para selecionar varios boards/imagens; depois larga o `Shift` e arrasta um deles para mover o grupo.
-- Usa `Esc` para limpar selecao simples, selecao multipla e sair do modo de ligar boards.
+- Usa `Esc` para limpar selecao simples, selecao multipla e cancelar uma ligacao em curso.
 - Clica num wire para o selecionar; `Shift` + clique seleciona varios wires/boards.
 - Usa `Delete` para apagar os boards/wires selecionados.
 - O quadro tem uma borda a marcar o limite da area de trabalho.
-- Para ligar boards, clica em `Ligar boards`, escolhe o board de origem e depois o board de destino.
-- O modo de ligar fica ativo para criares varias ligacoes seguidas.
+- Para ligar boards, passa o rato sobre um board e arrasta uma das bolinhas de ligacao ate outro board.
+- As bolinhas de ligacao aparecem apenas ao passar o rato perto de um board ou durante uma ligacao.
 - As ligacoes fazem angulos de 90 graus e tem um ponto que podes arrastar para ajustar o caminho.
 - As areas `Horas do projeto` e `Task list` podem ser encolhidas/abertas pela seta.
 - As gavetas laterais desaparecem para dar mais espaco ao quadro e abrem por botoes com icones.

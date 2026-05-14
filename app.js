@@ -104,7 +104,6 @@ const defaultState = {
 };
 
 let state = loadState();
-let linkStartId = null;
 let boardZoom = 1;
 let boardPan = { x: 0, y: 0 };
 let lastBoardPoint = { x: 140, y: 140 };
@@ -115,6 +114,8 @@ let selectedConnectionIds = new Set();
 let renamingProjectId = null;
 let interactionLock = false;
 let activeResizeId = null;
+let activeConnectionDrag = null;
+const connectionDotSides = ["top", "right", "bottom", "left"];
 
 const authScreen = document.querySelector("#auth-screen");
 const app = document.querySelector("#app");
@@ -139,7 +140,6 @@ const imageInput = document.querySelector("#image-input");
 const projectHours = document.querySelector("#project-hours");
 const hoursTotalLabel = document.querySelector("#hours-total-label");
 const hoursTable = document.querySelector("#hours-table");
-const linkModeBtn = document.querySelector("#link-mode-btn");
 const hoursPanel = document.querySelector("#hours-panel");
 const tasksPanel = document.querySelector("#tasks-panel");
 const toggleHours = document.querySelector("#toggle-hours");
@@ -195,13 +195,6 @@ projectForm.addEventListener("submit", (event) => {
 
 document.querySelector("#add-ticket-btn").addEventListener("click", () => addBoardItem("ticket"));
 
-linkModeBtn.addEventListener("click", () => {
-  linkStartId = null;
-  board.classList.toggle("linking");
-  linkModeBtn.classList.toggle("active");
-  linkModeBtn.textContent = board.classList.contains("linking") ? "Escolhe origem" : "Ligar boards";
-});
-
 imageInput.addEventListener("change", (event) => {
   const file = event.target.files[0];
   if (!file) return;
@@ -219,7 +212,9 @@ board.addEventListener("dragleave", () => board.classList.remove("drag-over"));
 board.addEventListener("drop", handleBoardDrop);
 board.addEventListener("pointermove", (event) => {
   lastBoardPoint = getBoardPoint(event);
+  updateNearbyConnectionDots(lastBoardPoint);
 });
+board.addEventListener("pointerleave", () => clearNearbyConnectionDots());
 board.addEventListener("pointerdown", startBoardPan);
 document.addEventListener("paste", handlePaste);
 document.addEventListener("copy", handleCopy);
@@ -514,10 +509,7 @@ function renderProjects() {
         persistAllVisibleItemSizes();
         state.activeProjectId = project.id;
         selectedItemIds.clear();
-        linkStartId = null;
-        board.classList.remove("linking");
-        linkModeBtn.classList.remove("active");
-        linkModeBtn.textContent = "Ligar boards";
+        clearConnectionDragUi();
         saveAndRender();
       });
     }
@@ -555,7 +547,7 @@ function renderWorkspace() {
 
   project.items.forEach((item) => {
     const node = document.createElement("article");
-    node.className = `board-item ${item.type} ${linkStartId === item.id ? "selected-link-source" : ""}`;
+    node.className = `board-item ${item.type}`;
     node.style.left = `${item.x}px`;
     node.style.top = `${item.y}px`;
     node.style.width = `${item.width}px`;
@@ -741,10 +733,6 @@ function renderWorkspace() {
     });
     node.append(text);
 
-    if (item.type === "ticket") {
-      node.addEventListener("click", () => handleTicketLinkClick(item.id));
-    }
-
     const resizeGrip = document.createElement("div");
     resizeGrip.className = "resize-grip";
     resizeGrip.title = "Redimensionar";
@@ -752,11 +740,30 @@ function renderWorkspace() {
     resizeGrip.addEventListener("pointerdown", beginResize, true);
     resizeGrip.addEventListener("mousedown", beginResize, true);
     node.append(resizeGrip);
+    node.append(createConnectionDots(item));
 
     boardContent.append(node);
     node.addEventListener("dragstart", (event) => event.preventDefault());
     node.addEventListener("pointerup", () => persistItemSize(node, item));
   });
+}
+
+function createConnectionDots(item) {
+  const dots = document.createElement("div");
+  dots.className = "connection-dots";
+  dots.setAttribute("aria-hidden", "true");
+
+  connectionDotSides.forEach((side) => {
+    const dot = document.createElement("button");
+    dot.type = "button";
+    dot.className = `connection-dot connection-dot-${side}`;
+    dot.title = "Arrastar para ligar";
+    dot.dataset.side = side;
+    dot.addEventListener("pointerdown", (event) => startNewConnectionDrag(event, item.id, side));
+    dots.append(dot);
+  });
+
+  return dots;
 }
 
 function renderConnections(project) {
@@ -769,21 +776,22 @@ function renderConnections(project) {
     const to = ticketMap.get(connection.to);
     if (!from || !to) return;
 
+    const selectedConnection = selectedConnectionIds.has(connection.id);
     const route = getConnectionRoute(connection, from, to);
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
     path.setAttribute("d", route.path);
-    path.setAttribute("class", `connection-line ${selectedConnectionIds.has(connection.id) ? "selected-connection" : ""}`);
+    path.setAttribute("class", `connection-line ${selectedConnection ? "selected-connection" : ""}`);
     path.dataset.id = connection.id;
     path.setAttribute("marker-end", "url(#arrow-head)");
     path.addEventListener("pointerdown", (event) => event.stopPropagation());
     path.addEventListener("click", (event) => handleConnectionSelection(event, connection.id));
     connectionsLayer.append(path);
 
-    const fromHandle = createConnectionEndpoint(route.start.x, route.start.y, "connection-endpoint from-endpoint");
+    const fromHandle = createConnectionEndpoint(route.start.x, route.start.y, `connection-endpoint from-endpoint ${selectedConnection ? "selected-connection-control" : ""}`);
     fromHandle.addEventListener("pointerdown", (event) => startConnectionEndpointDrag(event, project, connection, from, "fromSide"));
     connectionsLayer.append(fromHandle);
 
-    const toHandle = createConnectionEndpoint(route.end.x, route.end.y, "connection-endpoint to-endpoint");
+    const toHandle = createConnectionEndpoint(route.end.x, route.end.y, `connection-endpoint to-endpoint ${selectedConnection ? "selected-connection-control" : ""}`);
     toHandle.addEventListener("pointerdown", (event) => startConnectionEndpointDrag(event, project, connection, to, "toSide"));
     connectionsLayer.append(toHandle);
 
@@ -791,7 +799,7 @@ function renderConnections(project) {
     handle.setAttribute("cx", String(route.handleX));
     handle.setAttribute("cy", String(route.handleY));
     handle.setAttribute("r", "8");
-    handle.setAttribute("class", "connection-handle");
+    handle.setAttribute("class", `connection-handle ${selectedConnection ? "selected-connection-control" : ""}`);
     handle.addEventListener("pointerdown", (event) => startConnectionBendDrag(event, project, connection));
     connectionsLayer.append(handle);
   });
@@ -1497,7 +1505,6 @@ function removeBoardItem(id) {
   if (!project) return;
   project.items = project.items.filter((item) => item.id !== id);
   project.connections = project.connections.filter((connection) => connection.from !== id && connection.to !== id);
-  if (linkStartId === id) linkStartId = null;
   saveAndRender();
 }
 
@@ -1534,39 +1541,129 @@ function finishRenameProject(id, value) {
   saveAndRender();
 }
 
-function handleTicketLinkClick(id) {
+function startNewConnectionDrag(event, fromId, fromSide) {
+  if (event.button !== 0) return;
   const project = getActiveProject();
-  if (!project || !board.classList.contains("linking")) return;
+  const from = project?.items.find((item) => item.id === fromId);
+  if (!project || !from) return;
 
-  if (!linkStartId) {
-    linkStartId = id;
-    linkModeBtn.textContent = "Escolhe destino";
-    renderWorkspace();
-    return;
-  }
+  event.preventDefault();
+  event.stopPropagation();
+  interactionLock = true;
+  board.classList.add("connecting-board");
+  clearNearbyConnectionDots();
+  board.querySelector(`[data-id="${fromId}"]`)?.classList.add("connecting-source", "near-connection-target");
 
-  if (linkStartId !== id) {
+  const preview = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  preview.setAttribute("class", "connection-preview");
+  connectionsLayer.append(preview);
+  activeConnectionDrag = { fromId, fromSide, preview, target: null };
+
+  const move = (moveEvent) => {
+    const point = getBoardPoint(moveEvent);
+    const target = getClosestConnectionTarget(point, fromId);
+    activeConnectionDrag.target = target;
+    updateConnectionDragUi(fromId, target);
+
+    const start = getAnchorBySide(from, fromSide);
+    const end = target ? getAnchorBySide(target.item, target.side) : point;
+    preview.setAttribute("d", `M ${start.x} ${start.y} L ${end.x} ${end.y}`);
+  };
+
+  const end = () => {
+    const target = activeConnectionDrag?.target;
+    clearConnectionDragUi();
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", end);
+    window.removeEventListener("pointercancel", end);
+
+    if (!target || target.item.id === fromId) {
+      interactionLock = false;
+      return;
+    }
+
     const exists = project.connections.some((connection) =>
-      (connection.from === linkStartId && connection.to === id) ||
-      (connection.from === id && connection.to === linkStartId)
+      (connection.from === fromId && connection.to === target.item.id) ||
+      (connection.from === target.item.id && connection.to === fromId)
     );
     if (!exists) {
-      const from = project.items.find((item) => item.id === linkStartId);
-      const to = project.items.find((item) => item.id === id);
-      project.connections.push(createConnection(linkStartId, id, from, to));
+      project.connections.push(createConnection(fromId, target.item.id, from, target.item, fromSide, target.side));
     }
-  }
+    interactionLock = false;
+    saveAndRender();
+  };
 
-  linkStartId = null;
-  linkModeBtn.textContent = "Escolhe origem";
-  saveAndRender();
+  move(event);
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", end);
+  window.addEventListener("pointercancel", end);
 }
 
-function createConnection(fromId, toId, from, to) {
+function getClosestConnectionTarget(point, fromId, maxDistance = 92) {
+  const project = getActiveProject();
+  if (!project) return null;
+
+  return project.items
+    .filter((item) => item.id !== fromId)
+    .map((item) => {
+      const side = getClosestSide(item, point);
+      const anchor = getAnchorBySide(item, side);
+      return { item, side, distance: Math.hypot(anchor.x - point.x, anchor.y - point.y) };
+    })
+    .filter((target) => target.distance <= maxDistance)
+    .sort((a, b) => a.distance - b.distance)[0] || null;
+}
+
+function updateNearbyConnectionDots(point) {
+  if (activeConnectionDrag) return;
+  const project = getActiveProject();
+  if (!project) return;
+
+  boardContent.querySelectorAll(".board-item").forEach((node) => {
+    const item = project.items.find((candidate) => candidate.id === node.dataset.id);
+    node.classList.toggle("near-connection-target", Boolean(item && getDistanceToItem(point, item) <= 72));
+  });
+}
+
+function updateConnectionDragUi(fromId, target) {
+  boardContent.querySelectorAll(".board-item").forEach((node) => {
+    const isSource = node.dataset.id === fromId;
+    const isTarget = node.dataset.id === target?.item.id;
+    node.classList.toggle("connecting-source", isSource);
+    node.classList.toggle("near-connection-target", isSource || isTarget);
+    node.querySelectorAll(".connection-dot").forEach((dot) => {
+      dot.classList.toggle("hot", isTarget && dot.dataset.side === target.side);
+    });
+  });
+}
+
+function clearConnectionDragUi() {
+  activeConnectionDrag?.preview?.remove();
+  activeConnectionDrag = null;
+  board.classList.remove("connecting-board");
+  clearNearbyConnectionDots();
+}
+
+function clearNearbyConnectionDots() {
+  boardContent.querySelectorAll(".board-item").forEach((node) => {
+    node.classList.remove("near-connection-target", "connecting-source");
+    node.querySelectorAll(".connection-dot.hot").forEach((dot) => dot.classList.remove("hot"));
+  });
+}
+
+function getDistanceToItem(point, item) {
+  const width = item.width || 210;
+  const height = item.height || 140;
+  const dx = Math.max(item.x - point.x, 0, point.x - (item.x + width));
+  const dy = Math.max(item.y - point.y, 0, point.y - (item.y + height));
+  return Math.hypot(dx, dy);
+}
+
+function createConnection(fromId, toId, from, to, forcedFromSide, forcedToSide) {
   const fromCenter = getItemCenter(from);
   const toCenter = getItemCenter(to);
-  const fromSide = getAutoSide(fromCenter, toCenter);
-  const toSide = getAutoSide(toCenter, fromCenter);
+  const fromSide = forcedFromSide || getAutoSide(fromCenter, toCenter);
+  const toSide = forcedToSide || getAutoSide(toCenter, fromCenter);
   const bendAxis = ["left", "right"].includes(fromSide) ? "x" : "y";
   const connection = { id: crypto.randomUUID(), from: fromId, to: toId, fromSide, toSide, bendAxis };
   connection.bend = getDefaultConnectionBend(connection, { items: [from, to] });
@@ -1687,17 +1784,14 @@ function renderSelectionClasses() {
 }
 
 function isBoardDragBlocked(target) {
-  return Boolean(target.closest("button, input, select, textarea, [contenteditable='true'], .color-panel, .format-panel, .resize-grip, .connection-handle, .connection-endpoint"));
+  return Boolean(target.closest("button, input, select, textarea, [contenteditable='true'], .color-panel, .format-panel, .resize-grip, .connection-dot, .connection-handle, .connection-endpoint"));
 }
 
 function clearSelection() {
   selectedItemIds.clear();
   selectedConnectionIds.clear();
   selectedBoardItemId = null;
-  linkStartId = null;
-  board.classList.remove("linking");
-  linkModeBtn.classList.remove("active");
-  linkModeBtn.textContent = "Ligar boards";
+  clearConnectionDragUi();
   boardContent.querySelectorAll(".board-item").forEach((node) => {
     node.classList.remove("multi-selected", "selected-link-source", "colors-open", "format-open");
   });

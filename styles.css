@@ -517,6 +517,16 @@ textarea {
   filter: drop-shadow(0 0 4px rgba(18, 108, 131, 0.35));
 }
 
+.connection-preview {
+  stroke: var(--accent);
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-dasharray: 10 8;
+  fill: none;
+  opacity: 0.9;
+  pointer-events: none;
+}
+
 #arrow-head path {
   fill: #172033;
 }
@@ -526,7 +536,9 @@ textarea {
   stroke: var(--accent);
   stroke-width: 3;
   cursor: grab;
-  pointer-events: all;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 140ms ease;
 }
 
 .connection-handle:hover {
@@ -539,12 +551,19 @@ textarea {
   stroke: #172033;
   stroke-width: 3;
   cursor: pointer;
-  pointer-events: all;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 140ms ease;
 }
 
 .connection-endpoint:hover {
   fill: var(--accent);
   stroke: #ffffff;
+}
+
+.selected-connection-control {
+  opacity: 1;
+  pointer-events: all;
 }
 
 .board-item {
@@ -575,11 +594,74 @@ textarea {
   outline-offset: 4px;
 }
 
+.board-item.connecting-source,
+.board-item.near-connection-target {
+  outline: 3px solid rgba(18, 108, 131, 0.5);
+  outline-offset: 5px;
+}
+
 .board-item.image {
   width: 260px;
   height: 220px;
   min-height: 170px;
   background: white;
+}
+
+.connection-dots {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  z-index: 5;
+}
+
+.board-item:hover .connection-dots,
+.board-item.near-connection-target .connection-dots,
+.board-item.connecting-source .connection-dots {
+  opacity: 1;
+}
+
+.connection-dot {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  min-height: 18px;
+  padding: 0;
+  border-radius: 999px;
+  border: 3px solid white;
+  background: var(--accent);
+  box-shadow: 0 8px 18px rgba(18, 108, 131, 0.32);
+  pointer-events: auto;
+  cursor: crosshair;
+  transform: translate(-50%, -50%);
+}
+
+.connection-dot:hover,
+.connection-dot.hot {
+  background: #0a84ff;
+  transform: translate(-50%, -50%) scale(1.2);
+}
+
+.connection-dot-top {
+  top: 9px;
+  left: 50%;
+}
+
+.connection-dot-right {
+  top: 50%;
+  left: calc(100% - 9px);
+}
+
+.connection-dot-bottom {
+  top: calc(100% - 9px);
+  left: 50%;
+}
+
+.connection-dot-left {
+  top: 50%;
+  left: 9px;
 }
 
 .item-toolbar {
