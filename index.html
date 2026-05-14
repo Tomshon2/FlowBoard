@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="pt">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FlowBoard</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="auth-screen" class="auth-screen">
+      <div class="auth-panel">
+        <p class="eyebrow">Espaco privado</p>
+        <h1>FlowBoard</h1>
+        <p class="muted">
+          Projetos, quadro visual, lista de tarefas e horas planeadas num so lugar.
+        </p>
+        <form id="login-form" class="login-form">
+          <label id="login-label" for="access-code">Codigo de acesso</label>
+          <input id="login-email" class="online-auth-field hidden" type="email" autocomplete="email" placeholder="email@equipa.com" />
+          <div class="login-row">
+            <input id="access-code" type="password" autocomplete="current-password" placeholder="ex: equipa2026" />
+            <button type="submit">Entrar</button>
+          </div>
+          <button id="signup-btn" class="ghost-button online-auth-field hidden" type="button">Criar conta</button>
+          <p id="login-error" class="error" aria-live="polite"></p>
+        </form>
+      </div>
+    </div>
+
+    <main id="app" class="app hidden">
+      <button id="workspace-drawer-toggle" class="drawer-toggle drawer-toggle-left" type="button" aria-expanded="false" aria-controls="projects-drawer" title="Projetos">
+        <span class="toggle-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M3 6.5h6l2 2h10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 6.5v-1a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v1"/></svg>
+        </span>
+      </button>
+      <div class="right-drawer-toggles">
+        <button id="hours-drawer-toggle" class="drawer-toggle drawer-toggle-right" type="button" aria-expanded="false" aria-controls="side-drawer" title="Horas do projeto">
+          <span class="toggle-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg>
+          </span>
+        </button>
+        <button id="tasks-drawer-toggle" class="drawer-toggle drawer-toggle-right" type="button" aria-expanded="false" aria-controls="side-drawer" title="Task list">
+          <span class="toggle-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
+          </span>
+        </button>
+      </div>
+      <aside id="projects-drawer" class="projects-panel drawer drawer-left">
+        <div class="brand-row">
+          <div>
+            <p class="eyebrow">Workspace</p>
+            <h2>FlowBoard</h2>
+          </div>
+          <div class="brand-actions">
+            <button id="close-workspace-drawer" class="icon-text small ghost-button drawer-internal-close" type="button">&lt;</button>
+            <button id="logout-btn" class="icon-text small">Sair</button>
+          </div>
+        </div>
+
+        <form id="project-form" class="compact-form">
+          <input id="project-name" type="text" placeholder="Novo projeto" />
+          <button type="submit">Criar</button>
+        </form>
+
+        <div id="projects-list" class="projects-list"></div>
+      </aside>
+
+      <section class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Projeto ativo</p>
+            <h1 id="active-project-title">Sem projeto</h1>
+          </div>
+          <div class="topbar-actions">
+            <label class="file-button">
+              Importar imagem
+              <input id="image-input" type="file" accept="image/*" />
+            </label>
+            <button id="add-ticket-btn">Adicionar board</button>
+            <button id="link-mode-btn" class="ghost-button">Ligar boards</button>
+          </div>
+        </header>
+
+        <div id="board" class="board" aria-label="Quadro visual">
+          <div id="board-content" class="board-content">
+            <svg id="connections-layer" class="connections-layer" aria-hidden="true"></svg>
+          </div>
+          <div id="zoom-indicator" class="zoom-indicator">100%</div>
+        </div>
+      </section>
+
+      <aside id="side-drawer" class="side-panel drawer drawer-right">
+        <button id="close-side-drawer" class="drawer-close ghost-button drawer-internal-close" type="button">&gt;</button>
+        <section id="hours-panel" class="hours-panel collapsible-panel">
+          <div class="section-title">
+            <button id="toggle-hours" class="collapse-button panel-internal-toggle" type="button" aria-expanded="true" aria-controls="hours-content">v</button>
+            <div class="section-copy">
+              <p class="eyebrow">Planeamento</p>
+              <h2>Horas do projeto</h2>
+            </div>
+            <span id="hours-total-label" class="timer-label">0h</span>
+          </div>
+          <div id="hours-content" class="panel-content">
+            <div class="hours-input-row">
+              <label for="project-hours">SET HOURS</label>
+              <input id="project-hours" type="number" min="0" step="0.5" value="40" />
+              <button id="save-hours-btn">SAVE</button>
+            </div>
+            <div id="hours-table" class="hours-table"></div>
+          </div>
+        </section>
+
+        <section id="tasks-panel" class="tasks-panel collapsible-panel">
+          <div class="section-title">
+            <button id="toggle-tasks" class="collapse-button panel-internal-toggle" type="button" aria-expanded="true" aria-controls="tasks-content">v</button>
+            <div class="section-copy">
+              <p class="eyebrow">Execucao</p>
+              <h2>Task list</h2>
+            </div>
+            <span id="task-count" class="counter">0/0</span>
+          </div>
+          <div id="tasks-content" class="panel-content">
+            <form id="task-form" class="compact-form">
+              <input id="task-title" type="text" placeholder="Adicionar tarefa" />
+              <button type="submit">+</button>
+            </form>
+            <div id="tasks-list" class="tasks-list"></div>
+          </div>
+        </section>
+      </aside>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

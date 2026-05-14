@@ -1,0 +1,7 @@
+.appdata
+.git
+.localappdata
+.npm-cache
+.vercel-cache
+.vercel-config
+.vercel-data

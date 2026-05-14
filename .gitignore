@@ -1,0 +1,7 @@
+.appdata/
+.localappdata/
+.npm-cache/
+.vercel/
+.vercel-cache/
+.vercel-config/
+.vercel-data/
