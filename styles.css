@@ -686,6 +686,15 @@ textarea {
   transition: opacity 140ms ease;
 }
 
+.connection-insert {
+  fill: rgba(255, 255, 255, 0.8);
+  stroke-dasharray: 2 2;
+}
+
+.connection-waypoint {
+  fill: #ffffff;
+}
+
 .connection-handle:hover {
   fill: var(--accent);
   stroke: white;
