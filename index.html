@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pt">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -9,32 +9,32 @@
   <body>
     <div id="auth-screen" class="auth-screen">
       <div class="auth-panel">
-        <p class="eyebrow">Espaco privado</p>
+        <p class="eyebrow">Private space</p>
         <h1>FlowBoard</h1>
         <p class="muted">
-          Projetos, quadro visual, lista de tarefas e horas planeadas num so lugar.
+          Projects, visual boards, tasks, and planned hours in one place.
         </p>
         <form id="login-form" class="login-form">
-          <label id="login-label" for="access-code">Codigo de acesso</label>
+          <label id="login-label" for="access-code">Access code</label>
           <input id="login-email" class="online-auth-field hidden" type="email" autocomplete="email" placeholder="email@equipa.com" />
           <div class="login-row">
             <input id="access-code" type="password" autocomplete="current-password" placeholder="ex: equipa2026" />
-            <button type="submit">Entrar</button>
+            <button type="submit">Enter</button>
           </div>
-          <button id="signup-btn" class="ghost-button online-auth-field hidden" type="button">Criar conta</button>
+          <button id="signup-btn" class="ghost-button online-auth-field hidden" type="button">Create account</button>
           <p id="login-error" class="error" aria-live="polite"></p>
         </form>
       </div>
     </div>
 
     <main id="app" class="app hidden">
-      <button id="workspace-drawer-toggle" class="drawer-toggle drawer-toggle-left" type="button" aria-expanded="false" aria-controls="projects-drawer" title="Projetos">
-        <span class="toggle-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M3 6.5h6l2 2h10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 6.5v-1a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v1"/></svg>
-        </span>
-      </button>
       <div class="right-drawer-toggles">
-        <button id="hours-drawer-toggle" class="drawer-toggle drawer-toggle-right" type="button" aria-expanded="false" aria-controls="side-drawer" title="Horas do projeto">
+        <button id="workspace-drawer-toggle" class="drawer-toggle drawer-toggle-left" type="button" aria-expanded="false" aria-controls="projects-drawer" title="FlowBoard">
+          <span class="toggle-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M3 6.5h6l2 2h10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 6.5v-1a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v1"/></svg>
+          </span>
+        </button>
+        <button id="hours-drawer-toggle" class="drawer-toggle drawer-toggle-right" type="button" aria-expanded="false" aria-controls="side-drawer" title="Project hours">
           <span class="toggle-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg>
           </span>
@@ -53,53 +53,118 @@
           </div>
           <div class="brand-actions">
             <button id="close-workspace-drawer" class="icon-text small ghost-button drawer-internal-close" type="button">&lt;</button>
-            <button id="logout-btn" class="icon-text small">Sair</button>
+            <button id="logout-btn" class="icon-text small">Log out</button>
           </div>
         </div>
 
         <form id="project-form" class="compact-form">
-          <input id="project-name" type="text" placeholder="Novo projeto" />
-          <button type="submit">Criar</button>
+          <input id="project-name" type="text" placeholder="New project" />
+          <button type="submit">Create</button>
         </form>
 
         <div id="projects-list" class="projects-list"></div>
       </aside>
 
+      <aside id="properties-panel" class="properties-panel hidden" aria-hidden="true">
+        <div class="properties-heading">
+          <p class="eyebrow">Properties</p>
+          <h2 id="properties-title">Board</h2>
+        </div>
+
+        <section id="board-properties" class="property-section">
+          <label>
+            Fill color
+            <input id="properties-board-color" type="color" value="#fff1b8" />
+          </label>
+          <label>
+            HEX
+            <input id="properties-board-hex" type="text" maxlength="7" value="#fff1b8" />
+          </label>
+          <label>
+            Text
+            <textarea id="properties-board-text" rows="7" placeholder="Board text"></textarea>
+          </label>
+          <div class="text-style-row">
+            <label>
+              Font
+              <select id="properties-font-family">
+                <option value="Inter">Inter</option>
+                <option value="Arial">Arial</option>
+                <option value="Georgia">Georgia</option>
+                <option value="Verdana">Verdana</option>
+                <option value="Courier New">Courier New</option>
+                <option value="Trebuchet MS">Trebuchet MS</option>
+              </select>
+            </label>
+            <label>
+              Size
+              <input id="properties-font-size" type="number" min="10" max="72" step="1" value="16" />
+            </label>
+          </div>
+          <label>
+            Text color
+            <input id="properties-text-color" type="color" value="#1d2733" />
+          </label>
+          <div class="text-style-controls" aria-label="Text style">
+            <button id="properties-bold" type="button">B</button>
+            <button id="properties-italic" type="button">I</button>
+            <button id="properties-underline" type="button">U</button>
+          </div>
+        </section>
+
+        <section id="line-properties" class="property-section hidden">
+          <label>
+            Color
+            <input id="properties-line-color" type="color" value="#172033" />
+          </label>
+          <label>
+            Thickness
+            <input id="properties-line-thickness" type="range" min="1" max="14" step="1" value="3" />
+          </label>
+          <span id="properties-line-thickness-label">3px</span>
+        </section>
+      </aside>
+
       <section class="workspace">
         <header class="topbar">
           <div>
-            <p class="eyebrow">Projeto ativo</p>
-            <h1 id="active-project-title">Sem projeto</h1>
+            <p class="eyebrow">Active project</p>
+            <h1 id="active-project-title">No project</h1>
           </div>
           <div class="topbar-actions">
             <label class="file-button">
-              Importar imagem
+              Import image
               <input id="image-input" type="file" accept="image/*" />
             </label>
-            <div class="shape-picker">
-              <select id="shape-type" aria-label="Tipo de elemento">
-                <option value="ticket">Board</option>
-                <option value="circle">Circulo</option>
-                <option value="triangle">Triangulo</option>
-                <option value="hexagon">Hexagono</option>
-              </select>
-              <button id="add-shape-btn" type="button">Adicionar</button>
+            <div class="shape-toolbar" aria-label="Add element">
+              <button class="shape-tool" type="button" data-shape-tool="ticket" title="Board">
+                <svg class="shape-tool-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"></rect></svg>
+              </button>
+              <button class="shape-tool" type="button" data-shape-tool="circle" title="Circle">
+                <svg class="shape-tool-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"></circle></svg>
+              </button>
+              <button class="shape-tool" type="button" data-shape-tool="triangle" title="Triangle">
+                <svg class="shape-tool-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5 20 19H4Z"></path></svg>
+              </button>
+              <button class="shape-tool" type="button" data-shape-tool="hexagon" title="Hexagon">
+                <svg class="shape-tool-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8l5 8-5 8H8l-5-8Z"></path></svg>
+              </button>
             </div>
-            <button id="board-theme-btn" class="ghost-button" type="button">Fundo preto</button>
+            <button id="board-theme-btn" class="ghost-button" type="button">Dark background</button>
           </div>
         </header>
 
-        <div id="board" class="board" aria-label="Quadro visual">
+        <div id="board" class="board" aria-label="Visual board">
           <div id="board-content" class="board-content">
             <svg id="connections-layer" class="connections-layer" aria-hidden="true"></svg>
           </div>
           <div id="connection-style-panel" class="connection-style-panel hidden">
             <label>
-              Cor
+              Color
               <input id="connection-color" type="color" value="#172033" />
             </label>
             <label>
-              Espessura
+              Thickness
               <input id="connection-thickness" type="range" min="1" max="14" step="1" value="3" />
             </label>
             <span id="connection-thickness-label">3px</span>
@@ -114,8 +179,8 @@
           <div class="section-title">
             <button id="toggle-hours" class="collapse-button panel-internal-toggle" type="button" aria-expanded="true" aria-controls="hours-content">v</button>
             <div class="section-copy">
-              <p class="eyebrow">Planeamento</p>
-              <h2>Horas do projeto</h2>
+              <p class="eyebrow">Planning</p>
+              <h2>Project hours</h2>
             </div>
             <span id="hours-total-label" class="timer-label">0h</span>
           </div>
@@ -133,14 +198,14 @@
           <div class="section-title">
             <button id="toggle-tasks" class="collapse-button panel-internal-toggle" type="button" aria-expanded="true" aria-controls="tasks-content">v</button>
             <div class="section-copy">
-              <p class="eyebrow">Execucao</p>
+              <p class="eyebrow">Execution</p>
               <h2>Task list</h2>
             </div>
             <span id="task-count" class="counter">0/0</span>
           </div>
           <div id="tasks-content" class="panel-content">
             <form id="task-form" class="compact-form">
-              <input id="task-title" type="text" placeholder="Adicionar tarefa" />
+              <input id="task-title" type="text" placeholder="Add task" />
               <button type="submit">+</button>
             </form>
             <div id="tasks-list" class="tasks-list"></div>

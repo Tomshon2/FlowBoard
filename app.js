@@ -91,15 +91,15 @@ const defaultState = {
   projects: [
     {
       id: "project-1",
-      name: "Projeto exemplo",
+      name: "Example project",
       totalHours: 40,
       tasks: [
-        { id: "task-1", title: "Definir objetivo do sprint", done: false },
-        { id: "task-2", title: "Rever imagens e referencias", done: true }
+        { id: "task-1", title: "Define sprint goal", done: false },
+        { id: "task-2", title: "Review images and references", done: true }
       ],
       items: [
-        { id: "item-1", type: "ticket", x: 72, y: 70, width: 230, height: 140, text: "Board: criar wireframe inicial", color: "#fff1b8" },
-        { id: "item-2", type: "ticket", x: 330, y: 150, width: 260, height: 150, text: "Board: dividir entregas por blocos de foco", color: "#71d694" }
+        { id: "item-1", type: "ticket", x: 72, y: 70, width: 230, height: 140, text: "Board: create first wireframe", color: "#fff1b8" },
+        { id: "item-2", type: "ticket", x: 330, y: 150, width: 260, height: 150, text: "Board: split work into focus blocks", color: "#71d694" }
       ],
       connections: [{ id: "conn-1", from: "item-1", to: "item-2", fromSide: "bottom", toSide: "top", axis: "y", bend: 220 }]
     }
@@ -140,8 +140,7 @@ const taskTitle = document.querySelector("#task-title");
 const tasksList = document.querySelector("#tasks-list");
 const taskCount = document.querySelector("#task-count");
 const imageInput = document.querySelector("#image-input");
-const shapeType = document.querySelector("#shape-type");
-const addShapeBtn = document.querySelector("#add-shape-btn");
+const shapeTools = document.querySelectorAll("[data-shape-tool]");
 const boardThemeBtn = document.querySelector("#board-theme-btn");
 const projectHours = document.querySelector("#project-hours");
 const hoursTotalLabel = document.querySelector("#hours-total-label");
@@ -150,6 +149,22 @@ const connectionStylePanel = document.querySelector("#connection-style-panel");
 const connectionColor = document.querySelector("#connection-color");
 const connectionThickness = document.querySelector("#connection-thickness");
 const connectionThicknessLabel = document.querySelector("#connection-thickness-label");
+const propertiesPanel = document.querySelector("#properties-panel");
+const propertiesTitle = document.querySelector("#properties-title");
+const boardProperties = document.querySelector("#board-properties");
+const lineProperties = document.querySelector("#line-properties");
+const propertiesBoardColor = document.querySelector("#properties-board-color");
+const propertiesBoardHex = document.querySelector("#properties-board-hex");
+const propertiesBoardText = document.querySelector("#properties-board-text");
+const propertiesFontFamily = document.querySelector("#properties-font-family");
+const propertiesFontSize = document.querySelector("#properties-font-size");
+const propertiesTextColor = document.querySelector("#properties-text-color");
+const propertiesBold = document.querySelector("#properties-bold");
+const propertiesItalic = document.querySelector("#properties-italic");
+const propertiesUnderline = document.querySelector("#properties-underline");
+const propertiesLineColor = document.querySelector("#properties-line-color");
+const propertiesLineThickness = document.querySelector("#properties-line-thickness");
+const propertiesLineThicknessLabel = document.querySelector("#properties-line-thickness-label");
 const hoursPanel = document.querySelector("#hours-panel");
 const tasksPanel = document.querySelector("#tasks-panel");
 const toggleHours = document.querySelector("#toggle-hours");
@@ -171,7 +186,7 @@ loginForm.addEventListener("submit", (event) => {
   } else {
     const code = document.querySelector("#access-code").value.trim();
     if (code !== ACCESS_CODE) {
-      loginError.textContent = "Codigo incorreto.";
+      loginError.textContent = "Incorrect code.";
       return;
     }
     sessionStorage.setItem("flowboard-auth", "true");
@@ -203,16 +218,30 @@ projectForm.addEventListener("submit", (event) => {
   saveAndRender();
 });
 
-addShapeBtn.addEventListener("click", () => addSelectedShape());
+shapeTools.forEach((tool) => {
+  tool.addEventListener("click", () => addSelectedShape(tool.dataset.shapeTool));
+});
 boardThemeBtn.addEventListener("click", toggleBoardTheme);
 connectionStylePanel.addEventListener("pointerdown", (event) => event.stopPropagation());
 connectionColor.addEventListener("input", (event) => updateSelectedConnections({ color: event.target.value }));
 connectionThickness.addEventListener("input", (event) => updateSelectedConnections({ thickness: Number(event.target.value) }));
+propertiesPanel.addEventListener("pointerdown", (event) => event.stopPropagation());
+propertiesBoardColor.addEventListener("input", (event) => updateSelectedBoardColor(event.target.value));
+propertiesBoardHex.addEventListener("input", (event) => updateSelectedBoardColor(normalizeHexInput(event.target.value)));
+propertiesBoardText.addEventListener("input", (event) => updateSelectedBoardText(event.target.value));
+propertiesFontFamily.addEventListener("change", (event) => updateSelectedBoardTextStyle({ fontFamily: event.target.value }));
+propertiesFontSize.addEventListener("input", (event) => updateSelectedBoardTextStyle({ fontSize: Number(event.target.value) }));
+propertiesTextColor.addEventListener("input", (event) => updateSelectedBoardTextStyle({ color: event.target.value }));
+propertiesBold.addEventListener("click", () => toggleSelectedBoardTextStyle("bold"));
+propertiesItalic.addEventListener("click", () => toggleSelectedBoardTextStyle("italic"));
+propertiesUnderline.addEventListener("click", () => toggleSelectedBoardTextStyle("underline"));
+propertiesLineColor.addEventListener("input", (event) => updateSelectedConnections({ color: event.target.value }));
+propertiesLineThickness.addEventListener("input", (event) => updateSelectedConnections({ thickness: Number(event.target.value) }));
 
 imageInput.addEventListener("change", (event) => {
   const file = event.target.files[0];
   if (!file) return;
-  addImageFile(file, lastBoardPoint);
+  addImageFile(file);
   imageInput.value = "";
 });
 
@@ -448,6 +477,16 @@ function normalizeState() {
       shape: item.shape || "circle",
       color: item.color || ticketColors[0],
       html: item.html || escapeHtml(item.text || ""),
+      captionOpen: item.type === "image" ? Boolean(item.captionOpen) : true,
+      textStyle: {
+        fontFamily: "Inter",
+        fontSize: 16,
+        color: "#1d2733",
+        bold: false,
+        italic: false,
+        underline: false,
+        ...(item.textStyle || {})
+      },
       width: item.width || (item.type === "image" ? 260 : item.type === "shape" ? 140 : 210),
       height: item.height || (item.type === "image" ? 220 : item.type === "shape" ? 140 : 140)
     }));
@@ -500,24 +539,219 @@ function render() {
   renderTasks();
   renderHours();
   renderZoom();
-  renderConnectionStylePanel();
+  renderPropertiesPanel();
   syncDrawerButtons();
 }
 
 function renderBoardTheme() {
   board.classList.toggle("board-dark", state.boardTheme === "dark");
-  boardThemeBtn.textContent = state.boardTheme === "dark" ? "Fundo branco" : "Fundo preto";
+  boardThemeBtn.textContent = state.boardTheme === "dark" ? "Light background" : "Dark background";
 }
 
 function renderConnectionStylePanel() {
-  const project = getActiveProject();
-  const selectedConnection = project?.connections.find((connection) => selectedConnectionIds.has(connection.id));
-  connectionStylePanel.classList.toggle("hidden", !selectedConnection);
-  if (!selectedConnection) return;
+  connectionStylePanel.classList.add("hidden");
+  renderPropertiesPanel();
+}
 
-  connectionColor.value = normalizeHexColor(selectedConnection.color || DEFAULT_CONNECTION_COLOR);
-  connectionThickness.value = String(selectedConnection.thickness || DEFAULT_CONNECTION_THICKNESS);
-  connectionThicknessLabel.textContent = `${selectedConnection.thickness || DEFAULT_CONNECTION_THICKNESS}px`;
+function renderPropertiesPanel() {
+  const project = getActiveProject();
+  const selectedBoard = getSelectedBoardItem(project);
+  const selectedConnection = project?.connections.find((connection) => selectedConnectionIds.has(connection.id));
+  const hasSelection = Boolean(selectedBoard || selectedConnection);
+  propertiesPanel.classList.toggle("hidden", !hasSelection);
+  propertiesPanel.setAttribute("aria-hidden", String(!hasSelection));
+  boardProperties.classList.toggle("hidden", !selectedBoard);
+  lineProperties.classList.toggle("hidden", !selectedConnection);
+  if (!hasSelection) return;
+
+  if (selectedBoard) {
+    const isShape = selectedBoard.type === "shape";
+    propertiesTitle.textContent = isShape ? getShapeLabel(selectedBoard.shape) : selectedBoard.type === "image" ? "Image" : "Board";
+    const color = normalizeHexColor(selectedBoard.color || ticketColors[0]);
+    propertiesBoardColor.value = color;
+    propertiesBoardHex.value = color;
+    propertiesBoardColor.disabled = selectedBoard.type === "image";
+    propertiesBoardHex.disabled = selectedBoard.type === "image";
+    propertiesBoardText.value = selectedBoard.text || htmlToPlainText(selectedBoard.html || "");
+    const textStyle = getItemTextStyle(selectedBoard);
+    propertiesFontFamily.value = textStyle.fontFamily;
+    propertiesFontSize.value = String(textStyle.fontSize);
+    propertiesTextColor.value = normalizeHexColor(textStyle.color || "#1d2733", "#1d2733");
+    propertiesBold.classList.toggle("active", textStyle.bold);
+    propertiesItalic.classList.toggle("active", textStyle.italic);
+    propertiesUnderline.classList.toggle("active", textStyle.underline);
+  }
+
+  if (selectedConnection) {
+    propertiesTitle.textContent = "Connection";
+    const color = normalizeHexColor(selectedConnection.color || DEFAULT_CONNECTION_COLOR);
+    const thickness = selectedConnection.thickness || DEFAULT_CONNECTION_THICKNESS;
+    connectionColor.value = color;
+    connectionThickness.value = String(thickness);
+    connectionThicknessLabel.textContent = `${thickness}px`;
+    propertiesLineColor.value = color;
+    propertiesLineThickness.value = String(thickness);
+    propertiesLineThicknessLabel.textContent = `${thickness}px`;
+  }
+}
+
+function getSelectedBoardItem(project = getActiveProject()) {
+  if (!project) return null;
+  const selectedId = selectedBoardItemId || [...selectedItemIds][0];
+  return project.items.find((item) => item.id === selectedId) || null;
+}
+
+function updateSelectedBoardColor(value) {
+  if (!isValidHex(value)) return;
+  const item = getSelectedBoardItem();
+  if (!item || item.type === "image") return;
+  item.color = value;
+  propertiesBoardColor.value = value;
+  propertiesBoardHex.value = value;
+  const node = boardContent.querySelector(`[data-id="${item.id}"]`);
+  if (node) applyItemColorToNode(item, node);
+  saveState();
+}
+
+function applyItemColorToNode(item, node) {
+  if (item.type === "shape") {
+    node.querySelector(".shape-visual")?.style.setProperty("--shape-color", item.color || ticketColors[0]);
+    node.style.background = "transparent";
+    return;
+  }
+  node.style.background = item.color || ticketColors[0];
+}
+
+function getItemTextStyle(item) {
+  item.textStyle = {
+    fontFamily: "Inter",
+    fontSize: 16,
+    color: "#1d2733",
+    bold: false,
+    italic: false,
+    underline: false,
+    ...(item.textStyle || {})
+  };
+  item.textStyle.fontSize = clamp(Number(item.textStyle.fontSize) || 16, 10, 72);
+  item.textStyle.color = normalizeHexColor(item.textStyle.color || "#1d2733", "#1d2733");
+  return item.textStyle;
+}
+
+function updateSelectedBoardTextStyle(style) {
+  const item = getSelectedBoardItem();
+  if (!item) return;
+  const textStyle = getItemTextStyle(item);
+  Object.assign(textStyle, style);
+  textStyle.fontSize = clamp(Number(textStyle.fontSize) || 16, 10, 72);
+  const itemNode = boardContent.querySelector(`[data-id="${item.id}"]`);
+  const textNode = itemNode?.querySelector(".item-text");
+  if (textNode) {
+    applyTextStyleToNode(textNode, textStyle);
+    ensureItemFitsText(item, itemNode);
+    fitItemText(textNode, item);
+  }
+  renderPropertiesPanel();
+  saveState();
+}
+
+function toggleSelectedBoardTextStyle(key) {
+  const item = getSelectedBoardItem();
+  if (!item) return;
+  const textStyle = getItemTextStyle(item);
+  updateSelectedBoardTextStyle({ [key]: !textStyle[key] });
+}
+
+function applyTextStyleToNode(node, textStyle) {
+  node.style.fontFamily = textStyle.fontFamily;
+  node.style.fontSize = `${textStyle.fontSize}px`;
+  node.style.fontWeight = textStyle.bold ? "900" : "";
+  node.style.fontStyle = textStyle.italic ? "italic" : "";
+  node.style.textDecoration = textStyle.underline ? "underline" : "";
+  node.style.color = textStyle.color || "#1d2733";
+}
+
+function fitItemText(node, item) {
+  if (!node || item.type === "image") return;
+  const textStyle = getItemTextStyle(item);
+  node.style.fontSize = `${textStyle.fontSize}px`;
+}
+
+function getTextBoxFactors(item) {
+  if (item.type !== "shape") return { width: 1, height: 1 };
+  const shape = item.shape || "circle";
+  if (shape === "triangle") return { width: 0.56, height: 0.42 };
+  if (shape === "hexagon") return { width: 0.72, height: 0.56 };
+  return { width: 0.88, height: 0.86 };
+}
+
+function getMinimumItemSize(item, widthHint = item.width) {
+  const base = {
+    width: item.type === "image" ? 170 : item.type === "shape" ? 96 : 130,
+    height: item.type === "image" ? 160 : item.type === "shape" ? 86 : 90
+  };
+  if (item.type === "image") return base;
+
+  const plainText = (item.text || htmlToPlainText(item.html || "")).trim();
+  if (!plainText) return base;
+
+  const factors = getTextBoxFactors(item);
+  const availableTextWidth = Math.max(24, (widthHint || base.width) * factors.width - 6);
+  const textStyle = getItemTextStyle(item);
+  const fontSize = Math.max(10, Number(textStyle.fontSize) || 16);
+  const charsPerLine = Math.max(2, Math.floor(availableTextWidth / (fontSize * 0.58)));
+  const hardLines = plainText.split(/\n/);
+  const lineCount = hardLines.reduce((count, line) => {
+    return count + Math.max(1, Math.ceil(line.length / charsPerLine));
+  }, 0);
+  const textHeight = Math.ceil(lineCount * fontSize * 1.08 + 6);
+  const requiredHeight = Math.ceil(textHeight / factors.height);
+
+  return {
+    width: base.width,
+    height: Math.min(1200, Math.max(base.height, requiredHeight))
+  };
+}
+
+function ensureItemFitsText(item, node) {
+  const minSize = getMinimumItemSize(item, item.width);
+  const nextWidth = Math.max(item.width || minSize.width, minSize.width);
+  const nextHeight = Math.max(item.height || minSize.height, minSize.height);
+  if (nextWidth === item.width && nextHeight === item.height) return;
+  item.width = nextWidth;
+  item.height = nextHeight;
+  if (node) {
+    node.style.width = `${item.width}px`;
+    node.style.height = `${item.height}px`;
+  }
+}
+
+function updateSelectedBoardText(value) {
+  const item = getSelectedBoardItem();
+  if (!item) return;
+  item.text = value;
+  item.html = escapeHtml(value).replace(/\n/g, "<br>");
+  const itemNode = boardContent.querySelector(`[data-id="${item.id}"]`);
+  const textNode = itemNode?.querySelector(".item-text");
+  ensureItemFitsText(item, itemNode);
+  if (textNode && textNode !== document.activeElement) {
+    textNode.innerHTML = item.html;
+    fitItemText(textNode, item);
+  }
+  saveState();
+}
+
+function htmlToPlainText(html) {
+  const template = document.createElement("template");
+  template.innerHTML = html.replace(/<br\s*\/?>/gi, "\n");
+  return template.content.textContent || "";
+}
+
+function getShapeLabel(shape) {
+  return {
+    circle: "Circle",
+    triangle: "Triangle",
+    hexagon: "Hexagon"
+  }[shape] || "Shape";
 }
 
 function updateSelectedConnections(style) {
@@ -530,9 +764,13 @@ function updateSelectedConnections(style) {
     if (style.thickness) connection.thickness = clamp(style.thickness, 1, 14);
   });
 
-  connectionThicknessLabel.textContent = `${connectionThickness.value}px`;
+  const selectedConnection = project.connections.find((connection) => selectedConnectionIds.has(connection.id));
+  const thickness = selectedConnection?.thickness || DEFAULT_CONNECTION_THICKNESS;
+  connectionThicknessLabel.textContent = `${thickness}px`;
+  propertiesLineThicknessLabel.textContent = `${thickness}px`;
   connectionsLayer.innerHTML = "";
   renderConnections(project);
+  renderPropertiesPanel();
   saveState();
 }
 
@@ -571,6 +809,8 @@ function renderProjects() {
         persistAllVisibleItemSizes();
         state.activeProjectId = project.id;
         selectedItemIds.clear();
+        selectedConnectionIds.clear();
+        selectedBoardItemId = null;
         clearConnectionDragUi();
         saveAndRender();
       });
@@ -579,14 +819,14 @@ function renderProjects() {
     const deleteButton = document.createElement("button");
     deleteButton.type = "button";
     deleteButton.className = "delete-project";
-    deleteButton.title = "Apagar projeto";
+    deleteButton.title = "Delete project";
     deleteButton.textContent = "x";
     deleteButton.addEventListener("click", () => deleteProject(project.id));
 
     const renameButton = document.createElement("button");
     renameButton.type = "button";
     renameButton.className = "rename-project";
-    renameButton.title = "Renomear projeto";
+    renameButton.title = "Rename project";
     renameButton.textContent = "rename";
     renameButton.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -600,16 +840,22 @@ function renderProjects() {
 
 function renderWorkspace() {
   const project = getActiveProject();
-  activeProjectTitle.textContent = project?.name || "Sem projeto";
+  activeProjectTitle.textContent = project?.name || "No project";
   boardContent.querySelectorAll(".board-item").forEach((item) => item.remove());
   connectionsLayer.innerHTML = "";
   if (!project) return;
 
+  project.items.forEach((item) => ensureItemFitsText(item));
   renderConnections(project);
 
   project.items.forEach((item) => {
+    const boardLike = item.type === "ticket" || item.type === "shape";
+    const showInlineBoardTools = false;
+    ensureItemFitsText(item);
     const node = document.createElement("article");
     node.className = `board-item ${item.type}`;
+    node.classList.toggle("caption-open", item.type === "image" && item.captionOpen);
+    node.classList.toggle("caption-collapsed", item.type === "image" && !item.captionOpen);
     node.style.left = `${item.x}px`;
     node.style.top = `${item.y}px`;
     node.style.width = `${item.width}px`;
@@ -619,7 +865,7 @@ function renderWorkspace() {
     node.classList.toggle("multi-selected", selectedItemIds.has(item.id));
     node.addEventListener("pointerdown", (event) => {
       selectedBoardItemId = item.id;
-      if (event.target.closest(".resize-grip")) return;
+      if (event.target.closest(".resize-handle, .resize-edge")) return;
       if (event.shiftKey) {
         event.preventDefault();
         event.stopPropagation();
@@ -630,26 +876,37 @@ function renderWorkspace() {
         selectedItemIds = new Set([item.id]);
         selectedConnectionIds.clear();
         renderSelectionClasses();
+        renderPropertiesPanel();
+        return;
+      }
+      if (event.detail > 1) {
+        selectedItemIds = new Set([item.id]);
+        selectedConnectionIds.clear();
+        renderSelectionClasses();
+        renderPropertiesPanel();
+        enterItemTextEdit(event, node, item);
         return;
       }
       selectedItemIds = new Set([item.id]);
       selectedConnectionIds.clear();
       renderSelectionClasses();
+      renderPropertiesPanel();
       startDrag(event, item.id);
     }, true);
 
-    const toolbar = document.createElement("div");
-    toolbar.className = "item-toolbar";
-    toolbar.innerHTML = item.type === "image" ? "" : `<span class="item-title">Board</span>`;
+    if (showInlineBoardTools) {
+      const toolbar = document.createElement("div");
+      toolbar.className = "item-toolbar";
+      toolbar.innerHTML = item.type === "image" ? "" : `<span class="item-title">${item.type === "shape" ? getShapeLabel(item.shape) : "Board"}</span>`;
 
-    const actions = document.createElement("div");
-    actions.className = "ticket-actions";
-    if (item.type === "ticket") {
+      const actions = document.createElement("div");
+      actions.className = "ticket-actions";
+      if (boardLike) {
       const colorToggle = document.createElement("button");
       colorToggle.type = "button";
       colorToggle.className = "color-toggle";
-      colorToggle.title = "Abrir cores";
-      colorToggle.textContent = "Cores";
+      colorToggle.title = "Open colors";
+      colorToggle.textContent = "Colors";
       colorToggle.addEventListener("pointerdown", (event) => event.stopPropagation());
       colorToggle.addEventListener("click", (event) => {
         event.stopPropagation();
@@ -660,8 +917,8 @@ function renderWorkspace() {
       const textToggle = document.createElement("button");
       textToggle.type = "button";
       textToggle.className = "format-toggle";
-      textToggle.title = "Abrir estilos";
-      textToggle.textContent = "Texto";
+      textToggle.title = "Open styles";
+      textToggle.textContent = "Text";
       textToggle.addEventListener("pointerdown", (event) => event.stopPropagation());
       textToggle.addEventListener("click", (event) => {
         event.stopPropagation();
@@ -670,21 +927,11 @@ function renderWorkspace() {
       actions.append(textToggle);
     }
 
-    const deleteButton = document.createElement("button");
-    deleteButton.type = "button";
-    deleteButton.className = "delete-item";
-    deleteButton.title = "Remover";
-    deleteButton.textContent = "x";
-    deleteButton.addEventListener("pointerdown", (event) => event.stopPropagation());
-    deleteButton.addEventListener("click", (event) => {
-      event.stopPropagation();
-      removeBoardItem(item.id);
-    });
-    actions.append(deleteButton);
-    toolbar.append(actions);
-    node.append(toolbar);
+      toolbar.append(actions);
+      node.append(toolbar);
+    }
 
-    if (item.type === "ticket") {
+    if (showInlineBoardTools && boardLike) {
       const formatPanel = document.createElement("div");
       formatPanel.className = "format-panel";
       ["B", "I", "U", "S"].forEach((command) => {
@@ -725,7 +972,7 @@ function renderWorkspace() {
         const swatch = document.createElement("button");
         swatch.type = "button";
         swatch.className = "color-swatch";
-        swatch.title = "Mudar cor";
+        swatch.title = "Change color";
         swatch.style.background = color;
         swatch.addEventListener("pointerdown", (event) => event.stopPropagation());
         swatch.addEventListener("click", (event) => {
@@ -739,14 +986,15 @@ function renderWorkspace() {
       const colorPicker = document.createElement("input");
       colorPicker.type = "color";
       colorPicker.className = "color-picker";
-      colorPicker.title = "Escolher cor";
+      colorPicker.title = "Choose color";
       colorPicker.value = normalizeHexColor(item.color);
       colorPicker.addEventListener("pointerdown", (event) => event.stopPropagation());
       colorPicker.addEventListener("click", (event) => event.stopPropagation());
       colorPicker.addEventListener("input", (event) => {
         item.color = event.target.value;
-        node.style.background = item.color;
+        applyItemColorToNode(item, node);
         hexInput.value = item.color;
+        renderPropertiesPanel();
         saveState();
       });
 
@@ -755,16 +1003,17 @@ function renderWorkspace() {
       hexInput.className = "hex-input";
       hexInput.value = normalizeHexColor(item.color);
       hexInput.maxLength = 7;
-      hexInput.title = "Codigo HEX";
+      hexInput.title = "HEX code";
       hexInput.addEventListener("pointerdown", (event) => event.stopPropagation());
       hexInput.addEventListener("click", (event) => event.stopPropagation());
       hexInput.addEventListener("input", (event) => {
         const value = normalizeHexInput(event.target.value);
         if (!isValidHex(value)) return;
         item.color = value;
-        node.style.background = item.color;
+        applyItemColorToNode(item, node);
         colorPicker.value = item.color;
         event.target.value = item.color;
+        renderPropertiesPanel();
         saveState();
       });
       palette.append(colorPicker, hexInput);
@@ -774,9 +1023,29 @@ function renderWorkspace() {
     if (item.type === "image") {
       const img = document.createElement("img");
       img.src = item.src;
-      img.alt = item.text || "Imagem importada";
+      img.alt = item.text || "Imported image";
       img.draggable = false;
       node.append(img);
+
+      const captionToggle = document.createElement("button");
+      captionToggle.type = "button";
+      captionToggle.className = "image-caption-toggle";
+      captionToggle.title = item.captionOpen ? "Hide text" : "Show text";
+      captionToggle.setAttribute("aria-label", captionToggle.title);
+      captionToggle.textContent = item.captionOpen ? "^" : "v";
+      captionToggle.addEventListener("pointerdown", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      });
+      captionToggle.addEventListener("click", (event) => {
+        event.stopPropagation();
+        selectedBoardItemId = item.id;
+        selectedItemIds = new Set([item.id]);
+        selectedConnectionIds.clear();
+        item.captionOpen = !item.captionOpen;
+        saveAndRender();
+      });
+      node.append(captionToggle);
     }
 
     if (item.type === "shape") {
@@ -784,37 +1053,123 @@ function renderWorkspace() {
       shape.className = `shape-visual shape-${item.shape || "circle"}`;
       shape.style.setProperty("--shape-color", item.color || ticketColors[0]);
       node.append(shape);
-    } else {
-      const text = document.createElement("div");
-      text.className = `item-text ${item.type === "image" ? "image-caption" : ""}`;
-      text.contentEditable = "true";
-      text.dataset.placeholder = item.type === "ticket" ? "Descreve o board" : "Escreve uma legenda";
-      text.innerHTML = item.type === "ticket" ? (item.html || escapeHtml(item.text || "")) : escapeHtml(item.text || "");
-      text.addEventListener("pointerdown", (event) => {
-        selectedBoardItemId = item.id;
-        event.stopPropagation();
-      });
-      text.addEventListener("input", () => {
-        item.html = sanitizeEditableHtml(text.innerHTML);
-        item.text = text.textContent;
-        saveState();
-      });
-      node.append(text);
     }
 
-    const resizeGrip = document.createElement("div");
-    resizeGrip.className = "resize-grip";
-    resizeGrip.title = "Redimensionar";
-    const beginResize = (event) => startItemResize(event, node, item, project);
-    resizeGrip.addEventListener("pointerdown", beginResize, true);
-    resizeGrip.addEventListener("mousedown", beginResize, true);
-    node.append(resizeGrip);
+    const text = document.createElement("div");
+    text.className = `item-text ${item.type === "image" ? "image-caption" : ""} ${item.type === "shape" ? "shape-text" : ""}`;
+    text.classList.toggle("caption-hidden", item.type === "image" && !item.captionOpen);
+    text.contentEditable = "false";
+    text.dataset.placeholder = boardLike ? "Describe the board" : "Write a caption";
+    text.innerHTML = boardLike ? (item.html || escapeHtml(item.text || "")) : escapeHtml(item.text || "");
+    applyTextStyleToNode(text, getItemTextStyle(item));
+    text.addEventListener("pointerdown", (event) => {
+      selectedBoardItemId = item.id;
+      selectedItemIds = new Set([item.id]);
+      selectedConnectionIds.clear();
+      renderSelectionClasses();
+      renderPropertiesPanel();
+      event.stopPropagation();
+    });
+    text.addEventListener("input", () => {
+      item.html = sanitizeEditableHtml(text.innerHTML);
+      item.text = text.textContent;
+      ensureItemFitsText(item, node);
+      fitItemText(text, item);
+      renderPropertiesPanel();
+      saveState();
+    });
+    text.addEventListener("blur", () => exitItemTextEdit(node, text, item));
+    text.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        text.blur();
+      }
+    });
+    node.append(text);
+
+    node.append(createResizeHandles(node, item, project));
     node.append(createConnectionDots(item));
 
     boardContent.append(node);
+    window.requestAnimationFrame(() => fitItemText(text, item));
+    node.addEventListener("dblclick", (event) => enterItemTextEdit(event, node, item));
     node.addEventListener("dragstart", (event) => event.preventDefault());
     node.addEventListener("pointerup", () => persistItemSize(node, item));
   });
+}
+
+function enterItemTextEdit(event, node, item) {
+  event?.preventDefault();
+  event?.stopPropagation();
+  const text = node?.querySelector(".item-text");
+  if (!text) return;
+
+  if (item.type === "image" && !item.captionOpen) {
+    item.captionOpen = true;
+    saveAndRender();
+    window.setTimeout(() => {
+      const nextNode = boardContent.querySelector(`[data-id="${item.id}"]`);
+      const nextItem = getActiveProject()?.items.find((candidate) => candidate.id === item.id);
+      if (nextNode && nextItem) enterItemTextEdit(null, nextNode, nextItem);
+    }, 0);
+    return;
+  }
+
+  interactionLock = false;
+  board.classList.remove("dragging-board");
+  selectedBoardItemId = item.id;
+  selectedItemIds = new Set([item.id]);
+  selectedConnectionIds.clear();
+  renderSelectionClasses();
+  renderPropertiesPanel();
+  node.classList.add("editing-text");
+  text.contentEditable = "true";
+  text.focus({ preventScroll: true });
+
+  const range = document.createRange();
+  range.selectNodeContents(text);
+  range.collapse(false);
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+function exitItemTextEdit(node, text, item) {
+  if (!node?.classList.contains("editing-text")) return;
+  item.html = sanitizeEditableHtml(text.innerHTML);
+  item.text = text.textContent;
+  text.contentEditable = "false";
+  node.classList.remove("editing-text");
+  ensureItemFitsText(item, node);
+  fitItemText(text, item);
+  renderPropertiesPanel();
+  saveState();
+}
+
+function createResizeHandles(node, item, project) {
+  const handles = document.createElement("div");
+  handles.className = "resize-handles";
+  ["n", "e", "s", "w"].forEach((direction) => {
+    const edge = document.createElement("div");
+    edge.className = `resize-edge resize-edge-${direction}`;
+    edge.dataset.resize = direction;
+    edge.title = "Resize";
+    const beginResize = (event) => startItemResize(event, node, item, project, direction);
+    edge.addEventListener("pointerdown", beginResize, true);
+    edge.addEventListener("mousedown", beginResize, true);
+    handles.append(edge);
+  });
+  ["n", "e", "s", "w", "nw", "ne", "se", "sw"].forEach((direction) => {
+    const handle = document.createElement("div");
+    handle.className = `resize-handle resize-handle-${direction}`;
+    handle.dataset.resize = direction;
+    handle.title = "Resize";
+    const beginResize = (event) => startItemResize(event, node, item, project, direction);
+    handle.addEventListener("pointerdown", beginResize, true);
+    handle.addEventListener("mousedown", beginResize, true);
+    handles.append(handle);
+  });
+  return handles;
 }
 
 function createConnectionDots(item) {
@@ -826,7 +1181,7 @@ function createConnectionDots(item) {
     const dot = document.createElement("button");
     dot.type = "button";
     dot.className = `connection-dot connection-dot-${side}`;
-    dot.title = "Arrastar para ligar";
+    dot.title = "Drag to connect";
     dot.dataset.side = side;
     dot.addEventListener("pointerdown", (event) => startNewConnectionDrag(event, item.id, side));
     dots.append(dot);
@@ -1216,9 +1571,9 @@ function renderTasks() {
     const row = document.createElement("div");
     row.className = `task-item ${task.done ? "done" : ""}`;
     row.innerHTML = `
-      <input type="checkbox" ${task.done ? "checked" : ""} aria-label="Concluir tarefa" />
+      <input type="checkbox" ${task.done ? "checked" : ""} aria-label="Complete task" />
       <span class="task-text">${escapeHtml(task.title)}</span>
-      <button class="delete-task" title="Remover tarefa">x</button>
+      <button class="delete-task" title="Remove task">x</button>
     `;
     row.querySelector("input").addEventListener("change", (event) => {
       task.done = event.target.checked;
@@ -1260,8 +1615,7 @@ function renderHours() {
   });
 }
 
-function addSelectedShape() {
-  const selected = shapeType.value;
+function addSelectedShape(selected = "ticket") {
   if (selected === "ticket") {
     addBoardItem("ticket");
     return;
@@ -1271,7 +1625,8 @@ function addSelectedShape() {
     width: selected === "triangle" ? 150 : 140,
     height: 140,
     color: ticketColors[(getActiveProject()?.items.length || 0) % ticketColors.length],
-    text: selected
+    text: "New board",
+    html: "New board"
   });
 }
 
@@ -1279,41 +1634,77 @@ function addBoardItem(type, extra = {}) {
   const project = getActiveProject();
   if (!project) return;
   const isShape = type === "shape";
-  project.items.push({
+  const width = extra.width ?? (type === "image" ? 260 : isShape ? 140 : 230);
+  const height = extra.height ?? (type === "image" ? 220 : 140);
+  const position = getNewItemPosition(width, height, extra);
+  const item = {
     id: crypto.randomUUID(),
     type,
-    x: extra.x ?? (96 + project.items.length * 22),
-    y: extra.y ?? (86 + project.items.length * 18),
-    width: type === "image" ? 260 : isShape ? 140 : 230,
-    height: type === "image" ? 220 : 140,
-    text: type === "ticket" ? "Novo board" : "",
-    html: type === "ticket" ? "Novo board" : "",
+    x: position.x,
+    y: position.y,
+    width,
+    height,
+    text: type === "ticket" ? "New board" : "",
+    html: type === "ticket" ? "New board" : "",
     shape: isShape ? "circle" : undefined,
     color: ticketColors[project.items.length % ticketColors.length],
+    captionOpen: type !== "image",
     ...extra
-  });
+  };
+  project.items.push(item);
+  selectedBoardItemId = item.id;
+  selectedItemIds = new Set([item.id]);
+  selectedConnectionIds.clear();
   saveAndRender();
 }
 
-function addImageFile(file, point = lastBoardPoint) {
+function getNewItemPosition(width, height, extra = {}) {
+  if (Number.isFinite(extra.x) && Number.isFinite(extra.y)) {
+    return {
+      x: Math.max(0, Math.round(extra.x)),
+      y: Math.max(0, Math.round(extra.y))
+    };
+  }
+
+  const rect = board.getBoundingClientRect();
+  const center = {
+    x: (rect.width / 2 - boardPan.x) / boardZoom,
+    y: (rect.height / 2 - boardPan.y) / boardZoom
+  };
+
+  return {
+    x: Math.round(clamp(center.x - width / 2, 0, 6400 - width)),
+    y: Math.round(clamp(center.y - height / 2, 0, 4200 - height))
+  };
+}
+
+function addImageFile(file, point = null) {
   if (!file?.type?.startsWith("image/")) return;
   const reader = new FileReader();
-  reader.onload = () => addBoardItem("image", {
-    src: reader.result,
-    text: file.name || "Imagem",
-    x: Math.max(0, Math.round(point.x)),
-    y: Math.max(0, Math.round(point.y))
-  });
+  reader.onload = () => {
+    const placement = point ? {
+      x: Math.max(0, Math.round(point.x)),
+      y: Math.max(0, Math.round(point.y))
+    } : {};
+    addBoardItem("image", {
+      src: reader.result,
+      text: file.name || "Image",
+      ...placement
+    });
+  };
   reader.readAsDataURL(file);
 }
 
-function addImageUrl(src, point = lastBoardPoint) {
+function addImageUrl(src, point = null) {
   if (!src) return;
-  addBoardItem("image", {
-    src,
-    text: "Imagem colada",
+  const placement = point ? {
     x: Math.max(0, Math.round(point.x)),
     y: Math.max(0, Math.round(point.y))
+  } : {};
+  addBoardItem("image", {
+    src,
+    text: "Pasted image",
+    ...placement
   });
 }
 
@@ -1353,11 +1744,10 @@ function handlePaste(event) {
     return;
   }
 
-  const point = lastBoardPoint;
   const imageItems = [...event.clipboardData.items].filter((item) => item.type.startsWith("image/"));
   if (imageItems.length) {
     event.preventDefault();
-    imageItems.forEach((item, index) => addImageFile(item.getAsFile(), { x: point.x + index * 24, y: point.y + index * 24 }));
+    imageItems.forEach((item) => addImageFile(item.getAsFile()));
     return;
   }
 
@@ -1365,14 +1755,14 @@ function handlePaste(event) {
   const imageSrc = getImageSrcFromHtml(html);
   if (imageSrc) {
     event.preventDefault();
-    addImageUrl(imageSrc, point);
+    addImageUrl(imageSrc);
     return;
   }
 
   const text = event.clipboardData.getData("text/plain");
   if (isImageLikeUrl(text)) {
     event.preventDefault();
-    addImageUrl(text.trim(), point);
+    addImageUrl(text.trim());
     return;
   }
 
@@ -1387,7 +1777,7 @@ function handleCopy(event) {
   if (target?.matches?.("input, textarea, [contenteditable='true']")) return;
   const project = getActiveProject();
   const item = project?.items.find((candidate) => candidate.id === selectedBoardItemId);
-  if (!item || item.type !== "ticket") return;
+  if (!item || !["ticket", "shape"].includes(item.type)) return;
 
   event.preventDefault();
   copiedBoardItem = structuredClone(item);
@@ -1397,7 +1787,7 @@ function handleCopy(event) {
 
 function pasteTicket(source, point) {
   const project = getActiveProject();
-  if (!project || source.type !== "ticket") return;
+  if (!project || !["ticket", "shape"].includes(source.type)) return;
   const clone = {
     ...structuredClone(source),
     id: crypto.randomUUID(),
@@ -1411,7 +1801,7 @@ function pasteTicket(source, point) {
   saveAndRender();
 }
 
-function startItemResize(event, node, item, project) {
+function startItemResize(event, node, item, project, direction = "se") {
   if (event.type === "mousedown" && event.button !== 0) return;
   event.preventDefault();
   event.stopImmediatePropagation();
@@ -1433,6 +1823,8 @@ function startItemResize(event, node, item, project) {
   const origin = {
     x: event.clientX,
     y: event.clientY,
+    itemX: item.x,
+    itemY: item.y,
     width: item.width || Number.parseFloat(node.style.width) || Math.round(node.offsetWidth),
     height: item.height || Number.parseFloat(node.style.height) || Math.round(node.offsetHeight)
   };
@@ -1441,10 +1833,43 @@ function startItemResize(event, node, item, project) {
     moveEvent.preventDefault();
     const clientX = moveEvent.clientX ?? origin.x;
     const clientY = moveEvent.clientY ?? origin.y;
-    item.width = Math.max(190, Math.round(origin.width + (clientX - origin.x) / boardZoom));
-    item.height = Math.max(120, Math.round(origin.height + (clientY - origin.y) / boardZoom));
+    const dx = (clientX - origin.x) / boardZoom;
+    const dy = (clientY - origin.y) / boardZoom;
+    let nextX = origin.itemX;
+    let nextY = origin.itemY;
+    let nextWidth = origin.width;
+    let nextHeight = origin.height;
+
+    if (direction.includes("e")) nextWidth = origin.width + dx;
+    if (direction.includes("s")) nextHeight = origin.height + dy;
+    if (direction.includes("w")) {
+      nextWidth = origin.width - dx;
+      nextX = origin.itemX + dx;
+    }
+    if (direction.includes("n")) {
+      nextHeight = origin.height - dy;
+      nextY = origin.itemY + dy;
+    }
+
+    const minSize = getMinimumItemSize(item, Math.round(nextWidth));
+    if (nextWidth < minSize.width) {
+      if (direction.includes("w")) nextX -= minSize.width - nextWidth;
+      nextWidth = minSize.width;
+    }
+    if (nextHeight < minSize.height) {
+      if (direction.includes("n")) nextY -= minSize.height - nextHeight;
+      nextHeight = minSize.height;
+    }
+
+    item.width = Math.round(clamp(nextWidth, minSize.width, 6400));
+    item.height = Math.round(clamp(nextHeight, minSize.height, 4200));
+    item.x = Math.round(clamp(nextX, 0, 6400 - item.width));
+    item.y = Math.round(clamp(nextY, 0, 4200 - item.height));
+    node.style.left = `${item.x}px`;
+    node.style.top = `${item.y}px`;
     node.style.width = `${item.width}px`;
     node.style.height = `${item.height}px`;
+    fitItemText(node.querySelector(".item-text"), item);
     connectionsLayer.innerHTML = "";
     renderConnections(project);
   };
@@ -1518,6 +1943,7 @@ function startBoardPan(event) {
   if (event.button !== 0) return;
   if (event.target.closest(".board-item, .drawer-toggle, .connection-handle")) return;
   event.preventDefault();
+  clearSelection();
   board.classList.add("panning");
   const origin = {
     x: event.clientX,
@@ -1568,6 +1994,7 @@ function togglePanel(panel, button) {
 
 function toggleDrawer(drawer) {
   const className = drawer === "workspace" ? "workspace-open" : "side-open";
+  if (drawer === "workspace") app.classList.remove("side-open");
   app.classList.toggle(className);
   syncDrawerButtons();
 }
@@ -1600,6 +2027,7 @@ function toggleSidePanel(panelName) {
   sideDrawer.dataset.mode = panelName;
   setPanelOpen(hoursPanel, toggleHours, panelName === "hours");
   setPanelOpen(tasksPanel, toggleTasks, panelName === "tasks");
+  app.classList.remove("workspace-open");
   app.classList.add("side-open");
   syncDrawerButtons();
 }
@@ -1623,7 +2051,7 @@ function deleteProject(id) {
   if (!state.projects.length) {
     const newProject = {
       id: crypto.randomUUID(),
-      name: "Novo projeto",
+      name: "New project",
       totalHours: 40,
       tasks: [],
       items: [],
@@ -1828,6 +2256,7 @@ function startDrag(event, id) {
   };
 
   const move = (moveEvent) => {
+    moveEvent.preventDefault();
     const dx = (moveEvent.clientX - origin.pointerX) / boardZoom;
     const dy = (moveEvent.clientY - origin.pointerY) / boardZoom;
     selectedItems.forEach(({ item: selectedItem, x, y }) => {
@@ -1843,7 +2272,10 @@ function startDrag(event, id) {
     renderConnections(project);
   };
 
+  let dragEnded = false;
   const end = () => {
+    if (dragEnded) return;
+    dragEnded = true;
     interactionLock = false;
     board.classList.remove("dragging-board");
     selectedItems.forEach(({ item: selectedItem }) => {
@@ -1853,6 +2285,8 @@ function startDrag(event, id) {
     window.removeEventListener("pointermove", move);
     window.removeEventListener("pointerup", end);
     window.removeEventListener("pointercancel", end);
+    window.removeEventListener("mousemove", move, true);
+    window.removeEventListener("mouseup", end, true);
     if (event.pointerId !== undefined) {
       try {
         element.releasePointerCapture(event.pointerId);
@@ -1866,6 +2300,8 @@ function startDrag(event, id) {
   window.addEventListener("pointermove", move);
   window.addEventListener("pointerup", end);
   window.addEventListener("pointercancel", end);
+  window.addEventListener("mousemove", move, true);
+  window.addEventListener("mouseup", end, true);
 }
 
 function toggleItemSelection(id) {
@@ -1905,16 +2341,18 @@ function renderSelectionClasses() {
 }
 
 function isBoardDragBlocked(target) {
-  return Boolean(target.closest("button, input, select, textarea, [contenteditable='true'], .color-panel, .format-panel, .resize-grip, .connection-dot, .connection-handle, .connection-endpoint"));
+  return Boolean(target.closest("button, input, select, textarea, [contenteditable='true'], .color-panel, .format-panel, .resize-handle, .resize-edge, .connection-dot, .connection-handle, .connection-endpoint"));
 }
 
 function clearSelection() {
+  document.activeElement?.closest?.(".item-text")?.blur();
   selectedItemIds.clear();
   selectedConnectionIds.clear();
   selectedBoardItemId = null;
   clearConnectionDragUi();
   boardContent.querySelectorAll(".board-item").forEach((node) => {
-    node.classList.remove("multi-selected", "selected-link-source", "colors-open", "format-open");
+    node.classList.remove("multi-selected", "selected-link-source", "colors-open", "format-open", "editing-text");
+    node.querySelector(".item-text")?.setAttribute("contenteditable", "false");
   });
   connectionsLayer.innerHTML = "";
   renderConnections(getActiveProject());
@@ -2086,8 +2524,8 @@ function sanitizeEditableHtml(html) {
   return template.innerHTML;
 }
 
-function normalizeHexColor(value) {
-  return isValidHex(value) ? value : "#fff1b8";
+function normalizeHexColor(value, fallback = "#fff1b8") {
+  return isValidHex(value) ? value : fallback;
 }
 
 function isValidHex(value) {
