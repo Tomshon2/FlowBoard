@@ -15,6 +15,10 @@ let currentWorkspaceId = null;
 let realtimeChannel = null;
 let saveTimer = null;
 let applyingRemoteState = false;
+const HISTORY_LIMIT = 80;
+let undoStack = [];
+let redoStack = [];
+let lastHistorySnapshot = "";
 
 const ticketColors = [
   "#fff1b8", "#f6b7d8", "#b987f4", "#7dc7ff", "#71d694", "#ffb15f",
@@ -295,12 +299,14 @@ function showApp() {
   authScreen.classList.add("hidden");
   app.classList.remove("hidden");
   normalizeState();
+  initializeHistory();
   render();
 }
 
 async function initializeApp() {
   setupAuthUi();
   normalizeState();
+  initializeHistory();
 
   if (!onlineMode) {
     if (sessionStorage.getItem("flowboard-auth") === "true") {
@@ -409,6 +415,7 @@ async function loadOnlineWorkspace() {
   applyingRemoteState = true;
   state = workspace.state?.projects ? workspace.state : structuredClone(defaultState);
   normalizeState();
+  initializeHistory();
   applyingRemoteState = false;
   subscribeToWorkspace();
 }
@@ -453,6 +460,7 @@ function subscribeToWorkspace() {
         state = payload.new.state;
         latestLocalStateStamp = Math.max(latestLocalStateStamp, remoteStamp);
         normalizeState();
+        initializeHistory();
         render();
         applyingRemoteState = false;
       }
@@ -508,15 +516,98 @@ function normalizeState() {
 
 function saveState() {
   if (interactionLock) return;
+  recordHistoryChange();
   touchLocalState();
+  lastHistorySnapshot = getHistorySnapshot();
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   queueRemoteSave();
 }
 
 function commitState() {
+  recordHistoryChange();
   touchLocalState();
+  lastHistorySnapshot = getHistorySnapshot();
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   queueRemoteSave();
+}
+
+function initializeHistory() {
+  undoStack = [];
+  redoStack = [];
+  lastHistorySnapshot = getHistorySnapshot();
+}
+
+function getHistorySnapshot() {
+  return JSON.stringify(state);
+}
+
+function recordHistoryChange() {
+  if (applyingRemoteState) {
+    lastHistorySnapshot = getHistorySnapshot();
+    return;
+  }
+
+  const currentSnapshot = getHistorySnapshot();
+  if (!lastHistorySnapshot) {
+    lastHistorySnapshot = currentSnapshot;
+    return;
+  }
+  if (currentSnapshot === lastHistorySnapshot) return;
+
+  undoStack.push(lastHistorySnapshot);
+  if (undoStack.length > HISTORY_LIMIT) undoStack.shift();
+  redoStack = [];
+  lastHistorySnapshot = currentSnapshot;
+}
+
+function undoState() {
+  if (!undoStack.length) return;
+  const currentSnapshot = getHistorySnapshot();
+  const previousSnapshot = undoStack.pop();
+  redoStack.push(currentSnapshot);
+  restoreHistorySnapshot(previousSnapshot);
+}
+
+function redoState() {
+  if (!redoStack.length) return;
+  const currentSnapshot = getHistorySnapshot();
+  const nextSnapshot = redoStack.pop();
+  undoStack.push(currentSnapshot);
+  if (undoStack.length > HISTORY_LIMIT) undoStack.shift();
+  restoreHistorySnapshot(nextSnapshot);
+}
+
+function restoreHistorySnapshot(snapshot) {
+  try {
+    state = JSON.parse(snapshot);
+  } catch {
+    return;
+  }
+  normalizeState();
+  pruneSelectionToState();
+  touchLocalState();
+  lastHistorySnapshot = getHistorySnapshot();
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  queueRemoteSave();
+  render();
+}
+
+function pruneSelectionToState() {
+  const project = getActiveProject();
+  if (!project) {
+    selectedBoardItemId = null;
+    selectedItemIds.clear();
+    selectedConnectionIds.clear();
+    return;
+  }
+
+  const itemIds = new Set(project.items.map((item) => item.id));
+  const connectionIds = new Set(project.connections.map((connection) => connection.id));
+  selectedItemIds = new Set([...selectedItemIds].filter((id) => itemIds.has(id)));
+  selectedConnectionIds = new Set([...selectedConnectionIds].filter((id) => connectionIds.has(id)));
+  if (!selectedBoardItemId || !itemIds.has(selectedBoardItemId)) {
+    selectedBoardItemId = [...selectedItemIds][0] || null;
+  }
 }
 
 function touchLocalState() {
@@ -894,8 +985,9 @@ function renderWorkspace() {
         return;
       }
       if (isBoardDragBlocked(event.target)) {
-        selectedItemIds = new Set([item.id]);
+        if (!selectedItemIds.has(item.id)) selectedItemIds = new Set([item.id]);
         selectedConnectionIds.clear();
+        selectedBoardItemId = item.id;
         renderSelectionClasses();
         renderPropertiesPanel();
         return;
@@ -908,8 +1000,9 @@ function renderWorkspace() {
         enterItemTextEdit(event, node, item);
         return;
       }
-      selectedItemIds = new Set([item.id]);
+      if (!selectedItemIds.has(item.id)) selectedItemIds = new Set([item.id]);
       selectedConnectionIds.clear();
+      selectedBoardItemId = item.id;
       renderSelectionClasses();
       renderPropertiesPanel();
       startDrag(event, item.id);
@@ -1084,8 +1177,14 @@ function renderWorkspace() {
     text.innerHTML = boardLike ? (item.html || escapeHtml(item.text || "")) : escapeHtml(item.text || "");
     applyTextStyleToNode(text, getItemTextStyle(item));
     text.addEventListener("pointerdown", (event) => {
+      if (event.shiftKey) {
+        event.preventDefault();
+        event.stopPropagation();
+        toggleItemSelection(item.id);
+        return;
+      }
       selectedBoardItemId = item.id;
-      selectedItemIds = new Set([item.id]);
+      if (!selectedItemIds.has(item.id)) selectedItemIds = new Set([item.id]);
       selectedConnectionIds.clear();
       renderSelectionClasses();
       renderPropertiesPanel();
@@ -2527,14 +2626,15 @@ function startDrag(event, id) {
 }
 
 function toggleItemSelection(id) {
-  selectedConnectionIds.clear();
   if (selectedItemIds.has(id)) {
     selectedItemIds.delete(id);
+    selectedBoardItemId = [...selectedItemIds][0] || null;
   } else {
     selectedItemIds.add(id);
+    selectedBoardItemId = id;
   }
-  selectedBoardItemId = id;
   renderSelectionClasses();
+  renderPropertiesPanel();
 }
 
 function handleConnectionSelection(event, id) {
@@ -2583,6 +2683,17 @@ function clearSelection() {
 
 function handleGlobalKeydown(event) {
   const target = event.target;
+  const key = event.key.toLowerCase();
+  if ((event.ctrlKey || event.metaKey) && key === "z") {
+    event.preventDefault();
+    if (event.shiftKey) {
+      redoState();
+    } else {
+      undoState();
+    }
+    return;
+  }
+
   if (event.key === "Escape") {
     if (target?.matches?.("input, textarea, [contenteditable='true']")) {
       target.blur();
