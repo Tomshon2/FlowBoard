@@ -151,6 +151,27 @@ textarea {
   background: white;
 }
 
+.create-color-picker {
+  width: 42px;
+  height: 40px;
+  min-width: 42px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background:
+    conic-gradient(from 90deg, #f43f5e, #f59e0b, #facc15, #22c55e, #06b6d4, #6366f1, #d946ef, #f43f5e);
+  cursor: pointer;
+}
+
+.create-color-picker::-webkit-color-swatch-wrapper {
+  padding: 2px;
+}
+
+.create-color-picker::-webkit-color-swatch {
+  border: 2px solid white;
+  border-radius: 6px;
+}
+
 .shape-tool {
   width: 34px;
   height: 32px;

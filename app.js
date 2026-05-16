@@ -142,6 +142,7 @@ const taskTitle = document.querySelector("#task-title");
 const tasksList = document.querySelector("#tasks-list");
 const taskCount = document.querySelector("#task-count");
 const imageInput = document.querySelector("#image-input");
+const createColor = document.querySelector("#create-color");
 const shapeTools = document.querySelectorAll("[data-shape-tool]");
 const boardThemeBtn = document.querySelector("#board-theme-btn");
 const projectHours = document.querySelector("#project-hours");
@@ -224,6 +225,9 @@ shapeTools.forEach((tool) => {
   tool.addEventListener("click", () => addSelectedShape(tool.dataset.shapeTool));
 });
 boardThemeBtn.addEventListener("click", toggleBoardTheme);
+createColor.addEventListener("input", (event) => {
+  createColor.value = normalizeHexColor(event.target.value, ticketColors[0]);
+});
 connectionStylePanel.addEventListener("pointerdown", (event) => event.stopPropagation());
 connectionColor.addEventListener("input", (event) => updateSelectedConnections({ color: event.target.value }));
 connectionThickness.addEventListener("input", (event) => updateSelectedConnections({ thickness: Number(event.target.value) }));
@@ -1320,9 +1324,15 @@ function getConnectionRoute(connection, from, to, project) {
     y: end.y + endDirection.y * 36
   };
   const manualPoints = getConnectionManualPoints(connection);
+  const isSelfConnection = from.id === to.id;
+  const obstacles = isSelfConnection
+    ? (project?.items || []).map((item) => getItemBounds(item, 28))
+    : getConnectionObstacles(project, connection);
   const routedPoints = manualPoints.length
     ? [startStub, ...manualPoints, endStub]
-    : getOrthogonalRoutePoints(startStub, endStub, getConnectionObstacles(project, connection));
+    : isSelfConnection
+      ? getSelfConnectionRoutePoints(from, connection.fromSide, connection.toSide, startStub, endStub, obstacles)
+      : getOrthogonalRoutePoints(startStub, endStub, obstacles);
   const points = simplifyRoutePoints([start, ...routedPoints, end]);
   const editablePoints = points.slice(2, -2);
 
@@ -1378,6 +1388,42 @@ function getConnectionObstacles(project, connection) {
   return (project?.items || [])
     .filter((item) => item.id !== connection.from && item.id !== connection.to)
     .map((item) => getItemBounds(item, padding));
+}
+
+function getSelfConnectionRoutePoints(item, fromSide, toSide, startStub, endStub, obstacles) {
+  const box = getItemBounds(item, 64);
+  const width = item.width || 210;
+  const height = item.height || 140;
+  const horizontalGap = Math.max(100, width * 0.62);
+  const verticalGap = Math.max(100, height * 0.62);
+
+  if (fromSide === toSide) {
+    if (fromSide === "top" || fromSide === "bottom") {
+      const outsideY = fromSide === "top" ? box.top : box.bottom;
+      const sideSign = startStub.x + horizontalGap < 6400 ? 1 : -1;
+      const loopX = Math.round(clamp(startStub.x + sideSign * horizontalGap, 0, 6400));
+      return simplifyRoutePoints([
+        startStub,
+        { x: startStub.x, y: outsideY },
+        { x: loopX, y: outsideY },
+        { x: loopX, y: endStub.y },
+        endStub
+      ]);
+    }
+
+    const outsideX = fromSide === "left" ? box.left : box.right;
+    const sideSign = startStub.y + verticalGap < 4200 ? 1 : -1;
+    const loopY = Math.round(clamp(startStub.y + sideSign * verticalGap, 0, 4200));
+    return simplifyRoutePoints([
+      startStub,
+      { x: outsideX, y: startStub.y },
+      { x: outsideX, y: loopY },
+      { x: endStub.x, y: loopY },
+      endStub
+    ]);
+  }
+
+  return getOrthogonalRoutePoints(startStub, endStub, obstacles);
 }
 
 function getOrthogonalRoutePoints(start, end, obstacles) {
@@ -1786,7 +1832,7 @@ function addSelectedShape(selected = "ticket") {
     shape: selected,
     width: selected === "triangle" ? 150 : 140,
     height: 140,
-    color: ticketColors[(getActiveProject()?.items.length || 0) % ticketColors.length],
+    color: getCreationColor(),
     text: "New board",
     html: "New board"
   });
@@ -1809,7 +1855,7 @@ function addBoardItem(type, extra = {}) {
     text: type === "ticket" ? "New board" : "",
     html: type === "ticket" ? "New board" : "",
     shape: isShape ? "circle" : undefined,
-    color: ticketColors[project.items.length % ticketColors.length],
+    color: type === "image" ? "#ffffff" : getCreationColor(),
     captionOpen: type !== "image",
     ...extra
   };
@@ -2277,18 +2323,12 @@ function startNewConnectionDrag(event, fromId, fromSide) {
     window.removeEventListener("pointerup", end);
     window.removeEventListener("pointercancel", end);
 
-    if (!target || target.item.id === fromId) {
+    if (!target) {
       interactionLock = false;
       return;
     }
 
-    const exists = project.connections.some((connection) =>
-      (connection.from === fromId && connection.to === target.item.id) ||
-      (connection.from === target.item.id && connection.to === fromId)
-    );
-    if (!exists) {
-      project.connections.push(createConnection(fromId, target.item.id, from, target.item, fromSide, target.side));
-    }
+    project.connections.push(createConnection(fromId, target.item.id, from, target.item, fromSide, target.side));
     interactionLock = false;
     saveAndRender();
   };
@@ -2304,7 +2344,6 @@ function getClosestConnectionTarget(point, fromId, maxDistance = 92) {
   if (!project) return null;
 
   return project.items
-    .filter((item) => item.id !== fromId)
     .map((item) => {
       const side = getClosestSide(item, point);
       const anchor = getAnchorBySide(item, side);
@@ -2373,7 +2412,7 @@ function createConnection(fromId, toId, from, to, forcedFromSide, forcedToSide) 
     toSide,
     bendAxis,
     manualPoints: [],
-    color: DEFAULT_CONNECTION_COLOR,
+    color: getCreationColor(DEFAULT_CONNECTION_COLOR),
     thickness: DEFAULT_CONNECTION_THICKNESS,
     manualBend: false
   };
@@ -2688,10 +2727,10 @@ function saveActiveEditable(fromNode = window.getSelection()?.anchorNode) {
 
 function getStyleTitle(command) {
   return {
-    B: "Negrito",
-    I: "Italico",
-    U: "Sublinhado",
-    S: "Riscado"
+    B: "Bold",
+    I: "Italic",
+    U: "Underline",
+    S: "Strike"
   }[command];
 }
 
@@ -2709,6 +2748,10 @@ function sanitizeEditableHtml(html) {
 
 function normalizeHexColor(value, fallback = "#fff1b8") {
   return isValidHex(value) ? value : fallback;
+}
+
+function getCreationColor(fallback = ticketColors[0]) {
+  return normalizeHexColor(createColor?.value, fallback);
 }
 
 function isValidHex(value) {
