@@ -737,6 +737,13 @@ textarea {
   stroke: #ffffff;
 }
 
+.history-restoring *,
+.history-restoring *::before,
+.history-restoring *::after {
+  transition: none !important;
+  animation: none !important;
+}
+
 .selected-connection-control {
   opacity: 1;
   pointer-events: all;
@@ -759,6 +766,47 @@ textarea {
   display: flex;
   flex-direction: column;
   cursor: move;
+}
+
+.cursor-layer {
+  position: absolute;
+  inset: 0;
+  width: 6400px;
+  height: 4200px;
+  z-index: 30;
+  pointer-events: none;
+}
+
+.remote-cursor {
+  position: absolute;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  transform: translate(-2px, -2px);
+  pointer-events: none;
+}
+
+.remote-cursor-pointer {
+  width: 0;
+  height: 0;
+  border-left: 9px solid var(--cursor-color, #126c83);
+  border-top: 0 solid transparent;
+  border-bottom: 15px solid transparent;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.22));
+}
+
+.remote-cursor-name {
+  margin-top: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 8px;
+  background: var(--cursor-color, #126c83);
+  color: white;
+  padding: 3px 7px;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.1;
+  white-space: nowrap;
+  box-shadow: 0 6px 16px rgba(28, 39, 52, 0.2);
 }
 
 .board-item:hover,

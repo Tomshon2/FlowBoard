@@ -17,6 +17,7 @@
         <form id="login-form" class="login-form">
           <label id="login-label" for="access-code">Access code</label>
           <input id="login-email" class="online-auth-field hidden" type="email" autocomplete="email" placeholder="email@equipa.com" />
+          <input id="display-name" type="text" autocomplete="name" placeholder="Your name" />
           <div class="login-row">
             <input id="access-code" type="password" autocomplete="current-password" placeholder="ex: equipa2026" />
             <button type="submit">Enter</button>
@@ -158,6 +159,7 @@
         <div id="board" class="board" aria-label="Visual board">
           <div id="board-content" class="board-content">
             <svg id="connections-layer" class="connections-layer" aria-hidden="true"></svg>
+            <div id="cursor-layer" class="cursor-layer" aria-hidden="true"></div>
           </div>
           <div id="connection-style-panel" class="connection-style-panel hidden">
             <label>

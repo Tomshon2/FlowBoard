@@ -16,9 +16,19 @@ let realtimeChannel = null;
 let saveTimer = null;
 let applyingRemoteState = false;
 const HISTORY_LIMIT = 80;
+const HISTORY_GROUP_MS = 700;
 let undoStack = [];
 let redoStack = [];
 let lastHistorySnapshot = "";
+let lastHistoryRecordedAt = 0;
+const cursorColors = ["#126c83", "#d94a2b", "#8f2bd5", "#03943a", "#e5549f", "#2074b4", "#f57a00"];
+const clientId = sessionStorage.getItem("flowboard-client-id") || crypto.randomUUID();
+sessionStorage.setItem("flowboard-client-id", clientId);
+let currentDisplayName = localStorage.getItem("flowboard-display-name") || "";
+let cursorChannelReady = false;
+let cursorSendTimer = null;
+let pendingCursorPoint = null;
+let remoteCursors = new Map();
 
 const ticketColors = [
   "#fff1b8", "#f6b7d8", "#b987f4", "#7dc7ff", "#71d694", "#ffb15f",
@@ -132,6 +142,7 @@ const loginForm = document.querySelector("#login-form");
 const loginError = document.querySelector("#login-error");
 const loginLabel = document.querySelector("#login-label");
 const loginEmail = document.querySelector("#login-email");
+const displayNameInput = document.querySelector("#display-name");
 const signupBtn = document.querySelector("#signup-btn");
 const projectsList = document.querySelector("#projects-list");
 const projectForm = document.querySelector("#project-form");
@@ -140,6 +151,7 @@ const activeProjectTitle = document.querySelector("#active-project-title");
 const board = document.querySelector("#board");
 const boardContent = document.querySelector("#board-content");
 const connectionsLayer = document.querySelector("#connections-layer");
+const cursorLayer = document.querySelector("#cursor-layer");
 const zoomIndicator = document.querySelector("#zoom-indicator");
 const taskForm = document.querySelector("#task-form");
 const taskTitle = document.querySelector("#task-title");
@@ -185,9 +197,12 @@ const projectsDrawer = document.querySelector("#projects-drawer");
 const sideDrawer = document.querySelector("#side-drawer");
 let activeSidePanel = "hours";
 sideDrawer.dataset.mode = activeSidePanel;
+displayNameInput.value = currentDisplayName;
+displayNameInput.addEventListener("change", saveDisplayName);
 
 loginForm.addEventListener("submit", (event) => {
   event.preventDefault();
+  saveDisplayName();
   if (onlineMode) {
     signInOnline();
   } else {
@@ -266,8 +281,12 @@ board.addEventListener("drop", handleBoardDrop);
 board.addEventListener("pointermove", (event) => {
   lastBoardPoint = getBoardPoint(event);
   updateNearbyConnectionDots(lastBoardPoint);
+  broadcastCursor(lastBoardPoint);
 });
-board.addEventListener("pointerleave", () => clearNearbyConnectionDots());
+board.addEventListener("pointerleave", () => {
+  clearNearbyConnectionDots();
+  broadcastCursor(null);
+});
 board.addEventListener("pointerdown", startBoardPan);
 document.addEventListener("paste", handlePaste);
 document.addEventListener("copy", handleCopy);
@@ -319,6 +338,7 @@ async function initializeApp() {
 
   const { data } = await db.auth.getSession();
   currentUser = data.session?.user || null;
+  ensureDisplayName();
   if (!currentUser) {
     authScreen.classList.remove("hidden");
     app.classList.add("hidden");
@@ -331,14 +351,16 @@ async function initializeApp() {
 }
 
 function setupAuthUi() {
+  displayNameInput.placeholder = "Your name";
   if (!onlineMode) return;
-  loginLabel.textContent = "Login da equipa";
+  loginLabel.textContent = "Team login";
   loginEmail.classList.remove("hidden");
   signupBtn.classList.remove("hidden");
   document.querySelector("#access-code").placeholder = "password";
 }
 
 async function signInOnline() {
+  saveDisplayName();
   loginError.textContent = "";
   const email = loginEmail.value.trim();
   const password = document.querySelector("#access-code").value;
@@ -348,11 +370,13 @@ async function signInOnline() {
     return;
   }
   currentUser = data.user;
+  ensureDisplayName();
   await loadOnlineWorkspace();
   showApp();
 }
 
 async function signUpOnline() {
+  saveDisplayName();
   loginError.textContent = "";
   const email = loginEmail.value.trim();
   const password = document.querySelector("#access-code").value;
@@ -362,7 +386,8 @@ async function signUpOnline() {
     return;
   }
   currentUser = data.user;
-  loginError.textContent = data.session ? "" : "Conta criada. Confirma o email se o Supabase pedir.";
+  ensureDisplayName();
+  loginError.textContent = data.session ? "" : "Account created. Confirm the email if Supabase asks for it.";
   if (data.session) {
     await loadOnlineWorkspace();
     showApp();
@@ -370,10 +395,13 @@ async function signUpOnline() {
 }
 
 async function signOut() {
+  broadcastCursor(null, true);
+  clearRemoteCursors();
   if (onlineMode) {
     await saveStateRemoteNow();
     if (realtimeChannel) db.removeChannel(realtimeChannel);
     realtimeChannel = null;
+    cursorChannelReady = false;
     currentWorkspaceId = null;
     currentUser = null;
     await db.auth.signOut();
@@ -382,6 +410,111 @@ async function signOut() {
   }
   authScreen.classList.remove("hidden");
   app.classList.add("hidden");
+}
+
+function saveDisplayName() {
+  const value = displayNameInput.value.trim();
+  currentDisplayName = value || currentUser?.email?.split("@")[0] || "Guest";
+  localStorage.setItem("flowboard-display-name", currentDisplayName);
+  displayNameInput.value = currentDisplayName;
+}
+
+function ensureDisplayName() {
+  if (!currentDisplayName && currentUser?.email) {
+    currentDisplayName = currentUser.email.split("@")[0] || "Guest";
+    localStorage.setItem("flowboard-display-name", currentDisplayName);
+  }
+  displayNameInput.value = currentDisplayName;
+}
+
+function getCursorColor() {
+  let hash = 0;
+  for (const char of clientId) hash = (hash + char.charCodeAt(0)) % cursorColors.length;
+  return cursorColors[hash];
+}
+
+function broadcastCursor(point, immediate = false) {
+  if (!onlineMode || !cursorChannelReady || !realtimeChannel) return;
+  pendingCursorPoint = point ? { x: Math.round(point.x), y: Math.round(point.y) } : null;
+  if (immediate) {
+    sendPendingCursor();
+    return;
+  }
+  if (cursorSendTimer) return;
+  cursorSendTimer = window.setTimeout(sendPendingCursor, 55);
+}
+
+function sendPendingCursor() {
+  window.clearTimeout(cursorSendTimer);
+  cursorSendTimer = null;
+  if (!onlineMode || !cursorChannelReady || !realtimeChannel) return;
+  const point = pendingCursorPoint;
+  realtimeChannel.send({
+    type: "broadcast",
+    event: "cursor",
+    payload: {
+      clientId,
+      projectId: state.activeProjectId,
+      name: currentDisplayName || currentUser?.email?.split("@")[0] || "Guest",
+      color: getCursorColor(),
+      visible: Boolean(point),
+      x: point?.x ?? 0,
+      y: point?.y ?? 0,
+      sentAt: Date.now()
+    }
+  });
+}
+
+function handleRemoteCursor(message) {
+  const payload = message?.payload || {};
+  if (!payload.clientId || payload.clientId === clientId) return;
+
+  if (!payload.visible || payload.projectId !== state.activeProjectId) {
+    remoteCursors.delete(payload.clientId);
+    renderRemoteCursors();
+    return;
+  }
+
+  remoteCursors.set(payload.clientId, {
+    projectId: payload.projectId,
+    name: String(payload.name || "Guest").slice(0, 32),
+    color: normalizeHexColor(payload.color, "#126c83"),
+    x: clamp(Number(payload.x) || 0, 0, 6400),
+    y: clamp(Number(payload.y) || 0, 0, 4200),
+    seenAt: Date.now()
+  });
+  renderRemoteCursors();
+}
+
+function renderRemoteCursors() {
+  if (!cursorLayer) return;
+  const now = Date.now();
+  cursorLayer.innerHTML = "";
+  remoteCursors.forEach((cursor, id) => {
+    if (now - cursor.seenAt > 8000) {
+      remoteCursors.delete(id);
+      return;
+    }
+    if (cursor.projectId !== state.activeProjectId) return;
+    const node = document.createElement("div");
+    node.className = "remote-cursor";
+    node.style.left = `${cursor.x}px`;
+    node.style.top = `${cursor.y}px`;
+    node.style.setProperty("--cursor-color", cursor.color);
+
+    const pointer = document.createElement("span");
+    pointer.className = "remote-cursor-pointer";
+    const name = document.createElement("span");
+    name.className = "remote-cursor-name";
+    name.textContent = cursor.name;
+    node.append(pointer, name);
+    cursorLayer.append(node);
+  });
+}
+
+function clearRemoteCursors() {
+  remoteCursors.clear();
+  if (cursorLayer) cursorLayer.innerHTML = "";
 }
 
 async function loadOnlineWorkspace() {
@@ -446,6 +579,8 @@ async function createOnlineWorkspace() {
 
 function subscribeToWorkspace() {
   if (realtimeChannel) db.removeChannel(realtimeChannel);
+  cursorChannelReady = false;
+  clearRemoteCursors();
   realtimeChannel = db
     .channel(`workspace-${currentWorkspaceId}`)
     .on(
@@ -465,7 +600,11 @@ function subscribeToWorkspace() {
         applyingRemoteState = false;
       }
     )
-    .subscribe();
+    .on("broadcast", { event: "cursor" }, handleRemoteCursor)
+    .subscribe((status) => {
+      cursorChannelReady = status === "SUBSCRIBED";
+      if (cursorChannelReady) broadcastCursor(lastBoardPoint, true);
+    });
 }
 
 function loadState() {
@@ -535,6 +674,7 @@ function initializeHistory() {
   undoStack = [];
   redoStack = [];
   lastHistorySnapshot = getHistorySnapshot();
+  lastHistoryRecordedAt = 0;
 }
 
 function getHistorySnapshot() {
@@ -554,10 +694,14 @@ function recordHistoryChange() {
   }
   if (currentSnapshot === lastHistorySnapshot) return;
 
-  undoStack.push(lastHistorySnapshot);
-  if (undoStack.length > HISTORY_LIMIT) undoStack.shift();
+  const now = Date.now();
+  if (now - lastHistoryRecordedAt > HISTORY_GROUP_MS || !undoStack.length) {
+    undoStack.push(lastHistorySnapshot);
+    if (undoStack.length > HISTORY_LIMIT) undoStack.shift();
+  }
   redoStack = [];
   lastHistorySnapshot = currentSnapshot;
+  lastHistoryRecordedAt = now;
 }
 
 function undoState() {
@@ -587,9 +731,12 @@ function restoreHistorySnapshot(snapshot) {
   pruneSelectionToState();
   touchLocalState();
   lastHistorySnapshot = getHistorySnapshot();
+  lastHistoryRecordedAt = 0;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   queueRemoteSave();
+  app.classList.add("history-restoring");
   render();
+  window.requestAnimationFrame(() => app.classList.remove("history-restoring"));
 }
 
 function pruneSelectionToState() {
@@ -648,6 +795,7 @@ function render() {
   renderBoardTheme();
   renderProjects();
   renderWorkspace();
+  renderRemoteCursors();
   renderTasks();
   renderHours();
   renderZoom();
