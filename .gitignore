@@ -1,0 +1,7 @@
+.appdata/
+.localappdata/
+.npm-cache/
+node_modules/
+.env
+*.log
+.git-broken-backup/

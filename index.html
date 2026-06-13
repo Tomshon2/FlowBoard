@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FlowBoard</title>
+    <link rel="icon" type="image/png" href="Flow_Board_logo_clean.png" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="auth-screen" class="auth-screen">
+      <div id="auth-panel" class="auth-panel">
+        <section class="auth-form-side">
+          <div class="auth-form-card">
+            <h2 id="auth-form-title">Log in</h2>
+            <p id="auth-form-copy" class="muted">Enter your account and keep building your boards.</p>
+            <form id="login-form" class="login-form">
+              <label id="login-label" for="login-email">Email</label>
+              <input id="login-email" class="online-auth-field hidden" type="email" autocomplete="email" placeholder="email@equipa.com" />
+              <input id="display-name" type="text" autocomplete="name" placeholder="Visible name" />
+              <div class="login-row">
+                <input id="access-code" type="password" autocomplete="current-password" placeholder="Password" />
+                <button id="auth-submit-btn" type="submit">Log in</button>
+              </div>
+              <p id="password-rules" class="password-rules hidden">Use at least 8 characters with one uppercase letter, one number, and one special character like . ! ?</p>
+              <p id="login-error" class="error" aria-live="polite"></p>
+            </form>
+          </div>
+        </section>
+        <section class="auth-brand-side">
+          <div class="auth-wave auth-wave-one" aria-hidden="true"></div>
+          <div class="auth-wave auth-wave-two" aria-hidden="true"></div>
+          <div class="auth-wave auth-wave-three" aria-hidden="true"></div>
+          <div class="auth-brand-content">
+            <img class="auth-logo" src="Flow_Board_logo_clean.png" alt="FlowBoard logo" />
+            <h1>FlowBoard</h1>
+            <p id="auth-brand-copy">New here? Create an account and start your own board.</p>
+            <div class="auth-mode-tabs" aria-label="Authentication mode">
+              <button id="auth-login-mode" type="button">Log in</button>
+              <button id="auth-signup-mode" class="active" type="button">Sign up</button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <main id="app" class="app hidden">
+      <div class="right-drawer-toggles">
+        <button id="workspace-drawer-toggle" class="drawer-toggle drawer-toggle-left" type="button" aria-expanded="false" aria-controls="projects-drawer" title="FlowBoard">
+          <span class="toggle-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2h6.5A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5Z"/><path d="M3 10h18"/></svg>
+          </span>
+        </button>
+        <button id="hours-drawer-toggle" class="drawer-toggle drawer-toggle-right" type="button" aria-expanded="false" aria-controls="side-drawer" title="Project hours">
+          <span class="toggle-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg>
+          </span>
+        </button>
+        <button id="tasks-drawer-toggle" class="drawer-toggle drawer-toggle-right" type="button" aria-expanded="false" aria-controls="side-drawer" title="Task list">
+          <span class="toggle-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
+          </span>
+        </button>
+        <button id="story-drawer-toggle" class="drawer-toggle drawer-toggle-right" type="button" aria-expanded="false" aria-controls="side-drawer" title="Game story">
+          <span class="toggle-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M5 5.5A2.5 2.5 0 0 1 7.5 3H20v16H7.5A2.5 2.5 0 0 0 5 21Z"/><path d="M5 5.5V21"/><path d="M9 7h7"/><path d="M9 11h6"/></svg>
+          </span>
+        </button>
+        <button id="team-drawer-toggle" class="drawer-toggle drawer-toggle-right" type="button" aria-expanded="false" aria-controls="side-drawer" title="Team roles">
+          <span class="toggle-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M16 19v-1.5A3.5 3.5 0 0 0 12.5 14h-5A3.5 3.5 0 0 0 4 17.5V19"/><circle cx="10" cy="7" r="3"/><path d="M20 19v-1a3 3 0 0 0-2.2-2.9"/><path d="M17 4.3a3 3 0 0 1 0 5.4"/></svg>
+          </span>
+        </button>
+      </div>
+      <aside id="projects-drawer" class="projects-panel drawer drawer-left">
+        <div class="brand-row">
+          <div class="brand-identity">
+            <img class="brand-logo" src="Flow_Board_logo_clean.png" alt="FlowBoard logo" />
+            <div>
+              <p class="eyebrow">Workspace</p>
+              <h2>FlowBoard</h2>
+            </div>
+          </div>
+          <div class="brand-actions">
+            <button id="close-workspace-drawer" class="icon-text small ghost-button drawer-internal-close" type="button">&lt;</button>
+            <button id="invite-btn" class="icon-text small" type="button">Invite</button>
+            <button id="logout-btn" class="icon-text small">Log out</button>
+          </div>
+        </div>
+
+        <div id="invite-panel" class="invite-panel hidden">
+          <label for="invite-link">Invite link</label>
+          <div class="invite-row">
+            <input id="invite-link" type="text" readonly />
+            <button id="copy-invite-btn" class="small" type="button">Copy</button>
+          </div>
+          <p id="invite-status" class="muted"></p>
+        </div>
+
+        <form id="project-form" class="compact-form">
+          <input id="project-name" type="text" placeholder="New project" />
+          <button type="submit">Create</button>
+        </form>
+
+        <div id="projects-list" class="projects-list"></div>
+      </aside>
+
+      <aside id="properties-panel" class="properties-panel hidden" aria-hidden="true">
+        <div class="properties-heading">
+          <p class="eyebrow">Properties</p>
+          <h2 id="properties-title">Board</h2>
+        </div>
+
+        <section id="board-properties" class="property-section">
+          <label>
+            Fill color
+            <input id="properties-board-color" type="color" value="#fff1b8" />
+          </label>
+          <label>
+            HEX
+            <input id="properties-board-hex" type="text" maxlength="7" value="#fff1b8" />
+          </label>
+          <label>
+            Text
+            <textarea id="properties-board-text" rows="7" placeholder="Board text"></textarea>
+          </label>
+          <div class="text-style-row">
+            <label>
+              Font
+              <select id="properties-font-family">
+                <option value="Inter">Inter</option>
+                <option value="Arial">Arial</option>
+                <option value="Georgia">Georgia</option>
+                <option value="Verdana">Verdana</option>
+                <option value="Courier New">Courier New</option>
+                <option value="Trebuchet MS">Trebuchet MS</option>
+              </select>
+            </label>
+            <label>
+              Size
+              <input id="properties-font-size" type="number" min="10" max="72" step="1" value="16" />
+            </label>
+          </div>
+          <label>
+            Text color
+            <input id="properties-text-color" type="color" value="#1d2733" />
+          </label>
+          <div class="text-style-controls" aria-label="Text style">
+            <button id="properties-bold" type="button">B</button>
+            <button id="properties-italic" type="button">I</button>
+            <button id="properties-underline" type="button">U</button>
+          </div>
+        </section>
+
+        <section id="line-properties" class="property-section hidden">
+          <label>
+            Color
+            <input id="properties-line-color" type="color" value="#172033" />
+          </label>
+          <label>
+            Thickness
+            <input id="properties-line-thickness" type="range" min="1" max="24" step="1" value="3" />
+          </label>
+          <span id="properties-line-thickness-label">3px</span>
+        </section>
+      </aside>
+
+      <section class="workspace">
+        <header class="topbar">
+          <div class="topbar-title">
+            <img class="topbar-logo" src="Flow_Board_logo_clean.png" alt="FlowBoard logo" />
+            <div>
+              <p class="eyebrow">Active project</p>
+              <h1 id="active-project-title">No project</h1>
+            </div>
+          </div>
+          <div class="topbar-actions">
+            <label class="file-button">
+              Import image
+              <input id="image-input" type="file" accept="image/*" />
+            </label>
+            <input id="create-color" class="create-color-picker" type="color" value="#fff1b8" title="Creation color" aria-label="Creation color" />
+            <div class="shape-toolbar" aria-label="Add element">
+              <button class="shape-tool" type="button" data-shape-tool="ticket" title="Board">
+                <svg class="shape-tool-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"></rect></svg>
+              </button>
+              <button class="shape-tool" type="button" data-shape-tool="circle" title="Circle">
+                <svg class="shape-tool-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"></circle></svg>
+              </button>
+              <button class="shape-tool" type="button" data-shape-tool="triangle" title="Triangle">
+                <svg class="shape-tool-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5 20 19H4Z"></path></svg>
+              </button>
+              <button class="shape-tool" type="button" data-shape-tool="hexagon" title="Hexagon">
+                <svg class="shape-tool-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8l5 8-5 8H8l-5-8Z"></path></svg>
+              </button>
+              <button id="draw-tool" class="shape-tool" type="button" title="Draw">
+                <svg class="shape-tool-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4l11-11a2.8 2.8 0 0 0-4-4L4 16Z"></path><path d="M13 6l5 5"></path></svg>
+              </button>
+            </div>
+            <button id="board-theme-btn" class="ghost-button" type="button">Dark background</button>
+            <button id="top-logout-btn" class="ghost-button" type="button">Log out</button>
+          </div>
+        </header>
+
+        <div id="board" class="board" aria-label="Visual board">
+          <div id="board-content" class="board-content">
+            <svg id="drawing-layer" class="drawing-layer" aria-hidden="true"></svg>
+            <svg id="connections-layer" class="connections-layer" aria-hidden="true"></svg>
+            <div id="cursor-layer" class="cursor-layer" aria-hidden="true"></div>
+          </div>
+          <div id="connection-style-panel" class="connection-style-panel hidden">
+            <label>
+              Color
+              <input id="connection-color" type="color" value="#172033" />
+            </label>
+            <label>
+              Thickness
+              <input id="connection-thickness" type="range" min="1" max="24" step="1" value="3" />
+            </label>
+            <span id="connection-thickness-label">3px</span>
+          </div>
+          <div id="zoom-indicator" class="zoom-indicator">100%</div>
+        </div>
+      </section>
+
+      <aside id="side-drawer" class="side-panel drawer drawer-right">
+        <button id="close-side-drawer" class="drawer-close ghost-button drawer-internal-close" type="button">&gt;</button>
+        <section id="hours-panel" class="hours-panel collapsible-panel">
+          <div class="section-title">
+            <button id="toggle-hours" class="collapse-button panel-internal-toggle" type="button" aria-expanded="true" aria-controls="hours-content">v</button>
+            <div class="section-copy">
+              <p class="eyebrow">Planning</p>
+              <h2>Project hours</h2>
+            </div>
+            <span id="hours-total-label" class="timer-label">0h</span>
+          </div>
+          <div id="hours-content" class="panel-content">
+            <div class="hours-input-row">
+              <label for="project-hours">SET HOURS</label>
+              <input id="project-hours" type="number" min="0" step="0.5" value="40" />
+              <button id="save-hours-btn">SAVE</button>
+            </div>
+            <div id="hours-table" class="hours-table"></div>
+          </div>
+        </section>
+
+        <section id="tasks-panel" class="tasks-panel collapsible-panel">
+          <div class="section-title">
+            <button id="toggle-tasks" class="collapse-button panel-internal-toggle" type="button" aria-expanded="true" aria-controls="tasks-content">v</button>
+            <div class="section-copy">
+              <p class="eyebrow">Execution</p>
+              <h2>Task list</h2>
+            </div>
+            <span id="task-count" class="counter">0/0</span>
+          </div>
+          <div id="tasks-content" class="panel-content">
+            <form id="task-form" class="compact-form">
+              <input id="task-title" type="text" placeholder="Add task" />
+              <button type="submit">+</button>
+            </form>
+            <div id="tasks-list" class="tasks-list"></div>
+          </div>
+        </section>
+
+        <section id="story-panel" class="story-panel collapsible-panel">
+          <div class="section-title">
+            <button id="toggle-story" class="collapse-button panel-internal-toggle" type="button" aria-expanded="true" aria-controls="story-content">v</button>
+            <div class="section-copy">
+              <p class="eyebrow">Narrative</p>
+              <h2>Game story</h2>
+            </div>
+            <span id="story-count" class="counter">0</span>
+          </div>
+          <div id="story-content" class="panel-content">
+            <form id="story-root-form" class="compact-form">
+              <input id="story-root-title" type="text" placeholder="New story division" />
+              <button type="submit">+</button>
+            </form>
+            <div id="story-tree" class="story-tree"></div>
+          </div>
+        </section>
+
+        <section id="team-panel" class="team-panel collapsible-panel">
+          <div class="section-title">
+            <button id="toggle-team" class="collapse-button panel-internal-toggle" type="button" aria-expanded="true" aria-controls="team-content">v</button>
+            <div class="section-copy">
+              <p class="eyebrow">Production</p>
+              <h2>Team roles</h2>
+            </div>
+            <span id="team-count" class="counter">0</span>
+          </div>
+          <div id="team-content" class="panel-content">
+            <form id="team-role-form" class="team-role-form">
+              <input id="team-member-name" type="text" placeholder="Name" />
+              <input id="team-member-role" type="text" placeholder="Role" />
+              <button type="submit">Add</button>
+            </form>
+            <div id="team-role-list" class="team-role-list"></div>
+          </div>
+        </section>
+      </aside>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config.js"></script>
+    <script>
+      const flowboardScripts = [
+        "js/app-core.js",
+        "js/auth-realtime.js",
+        "js/state-history.js",
+        "js/render-board.js",
+        "js/board-tools.js",
+        "js/tasks-hours.js",
+        "js/story-team.js",
+        "js/items-interactions.js",
+        "js/selection-projects.js",
+        "js/text-utils.js",
+        "js/bootstrap.js"
+      ];
+      flowboardScripts.forEach((src) => document.write(`<script src="${src}"><\/script>`));
+    </script>
+  </body>
+</html>

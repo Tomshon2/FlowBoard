@@ -1,0 +1,6 @@
+{
+  "name": "flowboard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "FlowBoard static frontend powered by Supabase."
+}
