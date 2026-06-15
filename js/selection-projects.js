@@ -23,6 +23,7 @@ async function removeBoardItem(id) {
 async function deleteProject(id) {
   const project = state.projects.find((candidate) => candidate.id === id);
   if (project && !await confirmDangerousAction(`Delete project "${project.name}"? This cannot be undone.`)) return;
+  const beforeSnapshot = getHistorySnapshot();
   state.projects = state.projects.filter((project) => project.id !== id);
   if (!state.projects.length) {
     const newProject = {
@@ -34,6 +35,15 @@ async function deleteProject(id) {
       hourPlan: createDefaultHourPlan(),
       tasks: [],
       taskColumns: createDefaultTaskColumns(),
+      milestones: createDefaultMilestones(),
+      history: [{
+        id: crypto.randomUUID(),
+        user: getCurrentEventUser(),
+        action: "Project created",
+        target: "New project",
+        targetId: "",
+        at: new Date().toISOString()
+      }],
       story: [],
       teamRoles: [],
       items: [],
@@ -44,7 +54,17 @@ async function deleteProject(id) {
   if (state.activeProjectId === id) {
     state.activeProjectId = state.projects[0].id;
   }
-  saveAndRender();
+  selectedBoardItemId = null;
+  selectedItemIds.clear();
+  selectedConnectionIds.clear();
+  selectedDrawingIds.clear();
+  saveState({
+    historyEntry: createSnapshotHistoryEntry(beforeSnapshot),
+    forceStep: true,
+    skipProjectTouch: true
+  });
+  render();
+  saveStateRemoteNow();
 }
 
 function renameProject(id) {
@@ -265,6 +285,8 @@ function createConnection(fromId, toId, from, to, forcedFromSide, forcedToSide) 
     bendAxis,
     color: getCreationColor(DEFAULT_CONNECTION_COLOR),
     thickness: DEFAULT_CONNECTION_THICKNESS,
+    borderColor: "#ffffff",
+    borderThickness: 2,
     manualBend: false,
     manualPoints: [],
     snapToGrid: false
@@ -323,8 +345,10 @@ function startDrag(event, id) {
     selectedItems.forEach(({ item: selectedItem, x, y }) => {
       const nextX = x + dx;
       const nextY = y + dy;
-      selectedItem.x = clamp(nextX, 0, 6400 - (selectedItem.width || 210));
-      selectedItem.y = clamp(nextY, 0, 4200 - (selectedItem.height || 140));
+      const maxX = 6400 - (selectedItem.width || 210);
+      const maxY = 4200 - (selectedItem.height || 140);
+      selectedItem.x = selectedItem.snapToGrid === true ? snapBoardValueToGrid(nextX, maxX) : clamp(nextX, 0, maxX);
+      selectedItem.y = selectedItem.snapToGrid === true ? snapBoardValueToGrid(nextY, maxY) : clamp(nextY, 0, maxY);
       const selectedElement = board.querySelector(`[data-id="${selectedItem.id}"]`);
       if (selectedElement) {
         selectedElement.style.left = `${selectedItem.x}px`;
@@ -553,6 +577,9 @@ function startConnectionSelectionDrag(event, project, connectionId) {
       ...selectedConnections.map(({ connection }, index) =>
         createHistoryCommand("updateConnection", connection.id, beforeConnections[index], connection, { projectId: project.id }))
     ];
+    if (selectedItems.length) {
+      logProjectEvent("Element moved", selectedItems.length === 1 ? (selectedItems[0].item.text || "Board element") : `${selectedItems.length} elements`);
+    }
     commitState({
       historyEntry: createBatchHistoryCommand("moveSelection", commands, {
         targetId: commands.map((command) => command.targetId).join(",")
@@ -685,8 +712,12 @@ function startDrawingDrag(event, id) {
     interactionLock = false;
     board.classList.remove("dragging-board");
     selectedItems.forEach(({ item: selectedItem }) => {
-      selectedItem.x = Math.round(selectedItem.x);
-      selectedItem.y = Math.round(selectedItem.y);
+      if (selectedItem.snapToGrid === true) {
+        snapBoardItemToGrid(selectedItem);
+      } else {
+        selectedItem.x = Math.round(selectedItem.x);
+        selectedItem.y = Math.round(selectedItem.y);
+      }
     });
     window.removeEventListener("pointermove", move);
     window.removeEventListener("pointerup", end);
@@ -717,6 +748,26 @@ function renderSelectionClasses() {
   boardContent.querySelectorAll(".board-item").forEach((node) => {
     node.classList.toggle("multi-selected", selectedItemIds.has(node.dataset.id));
   });
+}
+
+function focusBoardItem(itemId) {
+  const project = getActiveProject();
+  const item = project?.items.find((candidate) => candidate.id === itemId);
+  if (!project || !item) return;
+  selectedBoardItemId = item.id;
+  selectedItemIds = new Set([item.id]);
+  selectedConnectionIds.clear();
+  selectedDrawingIds.clear();
+  drawMode = null;
+  shapeTools.forEach((button) => button.classList.remove("active"));
+  drawTool.classList.remove("active");
+
+  const rect = board.getBoundingClientRect();
+  boardPan.x = rect.width / 2 - (item.x + item.width / 2) * boardZoom;
+  boardPan.y = rect.height / 2 - (item.y + item.height / 2) * boardZoom;
+  renderZoom();
+  renderSelectionClasses();
+  renderPropertiesPanel();
 }
 
 function isBoardDragBlocked(target) {

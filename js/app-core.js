@@ -23,6 +23,8 @@ let cursorChannelReady = false;
 let cursorSendTimer = null;
 let pendingCursorPoint = null;
 let remoteCursors = new Map();
+let workspaceMembers = [];
+let currentWorkspaceRole = "guest";
 
 const ticketColors = [
   "#fff1b8", "#f6b7d8", "#b987f4", "#7dc7ff", "#71d694", "#ffb15f",
@@ -132,6 +134,26 @@ function createDefaultHourPlan() {
   }));
 }
 
+function createDefaultMilestones() {
+  return [
+    { name: "Prototype", status: "planned", progress: 0 },
+    { name: "Alpha", status: "planned", progress: 0 },
+    { name: "Beta", status: "planned", progress: 0 },
+    { name: "Playtest", status: "planned", progress: 0 },
+    { name: "Polish", status: "planned", progress: 0 },
+    { name: "Release", status: "planned", progress: 0 }
+  ].map((milestone, index) => ({
+    id: crypto.randomUUID(),
+    name: milestone.name,
+    description: "",
+    deadline: "",
+    taskIds: [],
+    progress: milestone.progress,
+    status: milestone.status,
+    order: index
+  }));
+}
+
 const defaultState = {
   activeProjectId: "project-1",
   boardTheme: "light",
@@ -148,6 +170,8 @@ const defaultState = {
         { id: "task-2", title: "Review images and references", columnId: "done", done: true, order: 0 }
       ],
       taskColumns: createDefaultTaskColumns(),
+      milestones: createDefaultMilestones(),
+      history: [],
       story: [
         { id: "story-1", title: "Premise", notes: "What is the game about?", children: [] }
       ],
@@ -183,6 +207,8 @@ let interactionLock = false;
 let activeResizeId = null;
 let activeConnectionDrag = null;
 let latestLocalStateStamp = 0;
+let boardMoveFrame = null;
+let queuedBoardMovePoint = null;
 const connectionDotSides = ["top", "right", "bottom", "left"];
 
 const authScreen = document.querySelector("#auth-screen");
@@ -214,6 +240,19 @@ const taskForm = document.querySelector("#task-form");
 const taskTitle = document.querySelector("#task-title");
 const tasksList = document.querySelector("#tasks-list");
 const taskCount = document.querySelector("#task-count");
+const taskSearch = document.querySelector("#task-search");
+const taskFilterPerson = document.querySelector("#task-filter-person");
+const taskFilterStatus = document.querySelector("#task-filter-status");
+const taskFilterPriority = document.querySelector("#task-filter-priority");
+const dataActionsToggle = document.querySelector("#data-actions-toggle");
+const kanbanDataActions = document.querySelector("#kanban-data-actions");
+const exportBoardPngBtn = document.querySelector("#export-board-png-btn");
+const exportBoardPdfBtn = document.querySelector("#export-board-pdf-btn");
+const exportProjectJsonBtn = document.querySelector("#export-project-json-btn");
+const exportProjectReportBtn = document.querySelector("#export-project-report-btn");
+const exportGddPdfBtn = document.querySelector("#export-gdd-pdf-btn");
+const importProjectJsonInput = document.querySelector("#import-project-json-input");
+const importTasksCsvInput = document.querySelector("#import-tasks-csv-input");
 const imageInput = document.querySelector("#image-input");
 const drawTool = document.querySelector("#draw-tool");
 const createColor = document.querySelector("#create-color");
@@ -236,7 +275,12 @@ const propertiesPanel = document.querySelector("#properties-panel");
 const propertiesTitle = document.querySelector("#properties-title");
 const boardProperties = document.querySelector("#board-properties");
 const lineProperties = document.querySelector("#line-properties");
+const propertiesBoardName = document.querySelector("#properties-board-name");
 const propertiesBoardColor = document.querySelector("#properties-board-color");
+const propertiesBoardBorderColor = document.querySelector("#properties-board-border-color");
+const propertiesBoardBorderThickness = document.querySelector("#properties-board-border-thickness");
+const propertiesBoardBorderThicknessLabel = document.querySelector("#properties-board-border-thickness-label");
+const propertiesBoardSnapGrid = document.querySelector("#properties-board-snap-grid");
 const propertiesBoardHex = document.querySelector("#properties-board-hex");
 const propertiesBoardText = document.querySelector("#properties-board-text");
 const propertiesFontFamily = document.querySelector("#properties-font-family");
@@ -245,24 +289,37 @@ const propertiesTextColor = document.querySelector("#properties-text-color");
 const propertiesBold = document.querySelector("#properties-bold");
 const propertiesItalic = document.querySelector("#properties-italic");
 const propertiesUnderline = document.querySelector("#properties-underline");
+const propertiesLinkedTasks = document.querySelector("#properties-linked-tasks");
+const propertiesLinkedTaskList = document.querySelector("#properties-linked-task-list");
 const propertiesLineColor = document.querySelector("#properties-line-color");
 const propertiesLineThickness = document.querySelector("#properties-line-thickness");
 const propertiesLineThicknessLabel = document.querySelector("#properties-line-thickness-label");
+const propertiesLineBorderColorRow = document.querySelector("#properties-line-border-color-row");
+const propertiesLineBorderColor = document.querySelector("#properties-line-border-color");
+const propertiesLineBorderThicknessRow = document.querySelector("#properties-line-border-thickness-row");
+const propertiesLineBorderThickness = document.querySelector("#properties-line-border-thickness");
+const propertiesLineBorderThicknessLabel = document.querySelector("#properties-line-border-thickness-label");
 const propertiesLineSnapRow = document.querySelector("#properties-line-snap-row");
 const propertiesLineSnapGrid = document.querySelector("#properties-line-snap-grid");
 const hoursPanel = document.querySelector("#hours-panel");
 const tasksPanel = document.querySelector("#tasks-panel");
 const storyPanel = document.querySelector("#story-panel");
 const teamPanel = document.querySelector("#team-panel");
+const milestonesPanel = document.querySelector("#milestones-panel");
+const historyPanel = document.querySelector("#history-panel");
 const toggleHours = document.querySelector("#toggle-hours");
 const toggleTasks = document.querySelector("#toggle-tasks");
 const toggleStory = document.querySelector("#toggle-story");
 const toggleTeam = document.querySelector("#toggle-team");
+const toggleMilestones = document.querySelector("#toggle-milestones");
+const toggleHistory = document.querySelector("#toggle-history");
 const workspaceDrawerToggle = document.querySelector("#workspace-drawer-toggle");
 const hoursDrawerToggle = document.querySelector("#hours-drawer-toggle");
 const tasksDrawerToggle = document.querySelector("#tasks-drawer-toggle");
 const storyDrawerToggle = document.querySelector("#story-drawer-toggle");
 const teamDrawerToggle = document.querySelector("#team-drawer-toggle");
+const milestonesDrawerToggle = document.querySelector("#milestones-drawer-toggle");
+const historyDrawerToggle = document.querySelector("#history-drawer-toggle");
 const closeWorkspaceDrawer = document.querySelector("#close-workspace-drawer");
 const closeSideDrawer = document.querySelector("#close-side-drawer");
 const topLogoutBtn = document.querySelector("#top-logout-btn");
@@ -279,11 +336,26 @@ const storyRootForm = document.querySelector("#story-root-form");
 const storyRootTitle = document.querySelector("#story-root-title");
 const storyTree = document.querySelector("#story-tree");
 const storyCount = document.querySelector("#story-count");
+const gddConcept = document.querySelector("#gdd-concept");
+const gddGenre = document.querySelector("#gdd-genre");
+const gddCharacterList = document.querySelector("#gdd-character-list");
+const gddAddCharacter = document.querySelector("#gdd-add-character");
+const gddMechanics = document.querySelector("#gdd-mechanics");
 const teamRoleForm = document.querySelector("#team-role-form");
 const teamMemberName = document.querySelector("#team-member-name");
 const teamMemberRole = document.querySelector("#team-member-role");
 const teamRoleList = document.querySelector("#team-role-list");
 const teamCount = document.querySelector("#team-count");
+const workspaceMembersList = document.querySelector("#workspace-members-list");
+const workspaceRoleBadge = document.querySelector("#workspace-role-badge");
+const workspaceMembersHelp = document.querySelector("#workspace-members-help");
+const milestoneForm = document.querySelector("#milestone-form");
+const milestoneName = document.querySelector("#milestone-name");
+const milestoneDeadline = document.querySelector("#milestone-deadline");
+const milestoneList = document.querySelector("#milestone-list");
+const milestoneCount = document.querySelector("#milestone-count");
+const projectHistoryList = document.querySelector("#project-history-list");
+const historyCount = document.querySelector("#history-count");
 let activeSidePanel = "hours";
 let drawerSwitchTimer = null;
 let pendingDrawerTarget = null;
@@ -321,6 +393,24 @@ topLogoutBtn.addEventListener("click", () => {
 });
 inviteBtn.addEventListener("click", () => createInviteLink());
 copyInviteBtn.addEventListener("click", () => copyInviteLink());
+taskSearch.addEventListener("input", () => renderTasks());
+taskFilterPerson.addEventListener("change", () => renderTasks());
+taskFilterStatus.addEventListener("change", () => renderTasks());
+taskFilterPriority.addEventListener("change", () => renderTasks());
+dataActionsToggle.addEventListener("click", () => toggleDataActions());
+exportBoardPngBtn.addEventListener("click", () => exportBoardAsPng());
+exportBoardPdfBtn.addEventListener("click", () => exportBoardAsPdf());
+exportProjectJsonBtn.addEventListener("click", () => exportProjectJson());
+exportProjectReportBtn.addEventListener("click", () => exportProjectReportPdf());
+exportGddPdfBtn.addEventListener("click", () => exportGameDesignDocumentPdf());
+importProjectJsonInput.addEventListener("change", (event) => {
+  importProjectJsonFile(event.target.files[0]);
+  importProjectJsonInput.value = "";
+});
+importTasksCsvInput.addEventListener("change", (event) => {
+  importTasksCsvFile(event.target.files[0]);
+  importTasksCsvInput.value = "";
+});
 
 projectForm.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -335,6 +425,15 @@ projectForm.addEventListener("submit", (event) => {
     hourPlan: createDefaultHourPlan(),
     tasks: [],
     taskColumns: createDefaultTaskColumns(),
+    milestones: createDefaultMilestones(),
+    history: [{
+      id: crypto.randomUUID(),
+      user: getCurrentEventUser(),
+      action: "Project created",
+      target: name,
+      targetId: "",
+      at: new Date().toISOString()
+    }],
     story: [],
     teamRoles: [],
     items: [],
@@ -372,7 +471,11 @@ connectionColor.addEventListener("input", (event) => updateSelectedConnections({
 connectionThickness.addEventListener("input", (event) => updateSelectedConnections({ thickness: Number(event.target.value) }));
 connectionSnapGrid.addEventListener("change", (event) => updateSelectedConnections({ snapToGrid: event.target.checked }));
 propertiesPanel.addEventListener("pointerdown", (event) => event.stopPropagation());
+propertiesBoardName.addEventListener("input", (event) => updateSelectedBoardName(event.target.value));
 propertiesBoardColor.addEventListener("input", (event) => updateSelectedBoardColor(event.target.value));
+propertiesBoardBorderColor.addEventListener("input", (event) => updateSelectedBoardBorder({ borderColor: event.target.value }));
+propertiesBoardBorderThickness.addEventListener("input", (event) => updateSelectedBoardBorder({ borderThickness: Number(event.target.value) }));
+propertiesBoardSnapGrid.addEventListener("change", (event) => updateSelectedBoardSnapToGrid(event.target.checked));
 propertiesBoardHex.addEventListener("input", (event) => updateSelectedBoardColor(normalizeHexInput(event.target.value)));
 propertiesBoardText.addEventListener("input", (event) => updateSelectedBoardText(event.target.value));
 propertiesFontFamily.addEventListener("change", (event) => updateSelectedBoardTextStyle({ fontFamily: event.target.value }));
@@ -383,6 +486,8 @@ propertiesItalic.addEventListener("click", () => toggleSelectedBoardTextStyle("i
 propertiesUnderline.addEventListener("click", () => toggleSelectedBoardTextStyle("underline"));
 propertiesLineColor.addEventListener("input", (event) => updateSelectedConnections({ color: event.target.value }));
 propertiesLineThickness.addEventListener("input", (event) => updateSelectedConnections({ thickness: Number(event.target.value) }));
+propertiesLineBorderColor.addEventListener("input", (event) => updateSelectedConnections({ borderColor: event.target.value }));
+propertiesLineBorderThickness.addEventListener("input", (event) => updateSelectedConnections({ borderThickness: Number(event.target.value) }));
 propertiesLineSnapGrid.addEventListener("change", (event) => updateSelectedConnections({ snapToGrid: event.target.checked }));
 
 imageInput.addEventListener("change", (event) => {
@@ -401,9 +506,16 @@ board.addEventListener("dragover", (event) => {
 board.addEventListener("dragleave", () => board.classList.remove("drag-over"));
 board.addEventListener("drop", (event) => handleBoardDrop(event));
 board.addEventListener("pointermove", (event) => {
-  lastBoardPoint = getBoardPoint(event);
-  updateNearbyConnectionDots(lastBoardPoint);
-  broadcastCursor(lastBoardPoint);
+  queuedBoardMovePoint = { clientX: event.clientX, clientY: event.clientY };
+  if (boardMoveFrame) return;
+  boardMoveFrame = window.requestAnimationFrame(() => {
+    boardMoveFrame = null;
+    if (!queuedBoardMovePoint) return;
+    lastBoardPoint = getBoardPoint(queuedBoardMovePoint);
+    updateNearbyConnectionDots(lastBoardPoint);
+    broadcastCursor(lastBoardPoint);
+    queuedBoardMovePoint = null;
+  });
 });
 board.addEventListener("pointerleave", () => {
   clearNearbyConnectionDots();
@@ -426,19 +538,34 @@ toggleHours.addEventListener("click", () => togglePanel(hoursPanel, toggleHours)
 toggleTasks.addEventListener("click", () => togglePanel(tasksPanel, toggleTasks));
 toggleStory.addEventListener("click", () => togglePanel(storyPanel, toggleStory));
 toggleTeam.addEventListener("click", () => togglePanel(teamPanel, toggleTeam));
+toggleMilestones.addEventListener("click", () => togglePanel(milestonesPanel, toggleMilestones));
+toggleHistory.addEventListener("click", () => togglePanel(historyPanel, toggleHistory));
 workspaceDrawerToggle.addEventListener("click", () => toggleDrawer("workspace"));
 hoursDrawerToggle.addEventListener("click", () => toggleSidePanel("hours"));
 tasksDrawerToggle.addEventListener("click", () => toggleSidePanel("tasks"));
 storyDrawerToggle.addEventListener("click", () => toggleSidePanel("story"));
 teamDrawerToggle.addEventListener("click", () => toggleSidePanel("team"));
+milestonesDrawerToggle.addEventListener("click", () => toggleSidePanel("milestones"));
+historyDrawerToggle.addEventListener("click", () => toggleSidePanel("history"));
 closeWorkspaceDrawer.addEventListener("click", () => closeDrawer("workspace"));
 closeSideDrawer.addEventListener("click", () => closeDrawer("side"));
+
+milestoneForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  addMilestone(milestoneName.value, milestoneDeadline.value);
+  milestoneName.value = "";
+  milestoneDeadline.value = "";
+});
 
 storyRootForm.addEventListener("submit", (event) => {
   event.preventDefault();
   addStoryNode(null, storyRootTitle.value);
   storyRootTitle.value = "";
 });
+[gddConcept, gddGenre, gddMechanics].forEach((field) => {
+  field.addEventListener("change", () => saveGddFields());
+});
+gddAddCharacter.addEventListener("click", () => addGddCharacter());
 
 teamRoleForm.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -454,5 +581,14 @@ taskForm.addEventListener("submit", (event) => {
   addTaskColumn(title);
   taskTitle.value = "";
 });
+}
+
+function toggleDataActions(forceOpen) {
+  const isOpen = typeof forceOpen === "boolean"
+    ? forceOpen
+    : kanbanDataActions.classList.contains("hidden");
+  kanbanDataActions.classList.toggle("hidden", !isOpen);
+  dataActionsToggle.classList.toggle("active", isOpen);
+  dataActionsToggle.setAttribute("aria-expanded", String(isOpen));
 }
 

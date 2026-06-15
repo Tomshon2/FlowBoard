@@ -289,6 +289,7 @@ function sendPendingCursor() {
     event: "cursor",
     payload: {
       clientId,
+      userId: currentUser?.id || "",
       projectId: state.activeProjectId,
       name: currentDisplayName || currentUser?.email?.split("@")[0] || "Guest",
       color: getCursorColor(),
@@ -311,6 +312,7 @@ function handleRemoteCursor(message) {
   }
 
   remoteCursors.set(payload.clientId, {
+    userId: payload.userId ? String(payload.userId) : "",
     projectId: payload.projectId,
     name: String(payload.name || "Guest").slice(0, 32),
     color: normalizeHexColor(payload.color, "#126c83"),
@@ -319,6 +321,7 @@ function handleRemoteCursor(message) {
     seenAt: Date.now()
   });
   renderRemoteCursors();
+  renderWorkspaceMembers();
 }
 
 function renderRemoteCursors() {
@@ -350,6 +353,7 @@ function renderRemoteCursors() {
 function clearRemoteCursors() {
   remoteCursors.clear();
   if (cursorLayer) cursorLayer.innerHTML = "";
+  renderWorkspaceMembers();
 }
 
 async function loadOnlineWorkspace(initialState = {}) {
@@ -374,7 +378,7 @@ async function getFirstAvailableWorkspace() {
     .order("created_at", { ascending: true });
   if (error) throw error;
   const row = (data || []).find((membership) => membership.workspaces);
-  return row?.workspaces || null;
+  return row?.workspaces ? { ...row.workspaces, currentRole: row.role } : null;
 }
 
 async function getWorkspaceById(workspaceId) {
@@ -421,11 +425,13 @@ function getPasswordValidationError(password) {
 
 function applyLoadedWorkspace(workspace) {
   currentWorkspaceId = workspace.id;
+  currentWorkspaceRole = workspace.currentRole || (workspace.owner_id === currentUser?.id ? "owner" : "guest");
   applyingRemoteState = true;
   state = workspace.state?.projects ? workspace.state : structuredClone(defaultState);
   normalizeState();
   initializeHistory();
   applyingRemoteState = false;
+  loadWorkspaceMembers();
   subscribeToWorkspace();
 }
 
@@ -448,7 +454,80 @@ async function createOnlineWorkspace(initialState = {}) {
   if (memberError && memberError.code !== "23505") throw memberError;
 
   currentWorkspaceId = workspace.id;
+  currentWorkspaceRole = "owner";
   return workspace;
+}
+
+async function loadWorkspaceMembers() {
+  const client = getSupabaseClient();
+  if (!client || !currentWorkspaceId) {
+    workspaceMembers = [];
+    currentWorkspaceRole = "guest";
+    renderWorkspaceMembers();
+    return;
+  }
+
+  try {
+    const { data, error } = await client
+      .from("workspace_members")
+      .select("workspace_id, user_id, role, created_at, profiles(display_name)")
+      .eq("workspace_id", currentWorkspaceId)
+      .order("created_at", { ascending: true });
+    if (error) throw error;
+    workspaceMembers = (data || []).map((member) => ({
+      workspaceId: member.workspace_id,
+      userId: member.user_id,
+      role: member.role || "guest",
+      createdAt: member.created_at,
+      displayName: member.profiles?.display_name || (member.user_id === currentUser?.id ? currentDisplayName : "Team member")
+    }));
+    currentWorkspaceRole = workspaceMembers.find((member) => member.userId === currentUser?.id)?.role || currentWorkspaceRole || "guest";
+  } catch (error) {
+    workspaceMembers = [];
+    console.warn("FlowBoard members load failed:", error.message);
+  }
+  renderWorkspaceMembers();
+}
+
+function canManageWorkspaceMembers() {
+  return ["owner", "admin"].includes(currentWorkspaceRole);
+}
+
+async function updateWorkspaceMemberRole(userId, role) {
+  if (!currentWorkspaceId || !canManageWorkspaceMembers()) return;
+  const allowedRoles = new Set(["admin", "editor", "viewer", "guest"]);
+  if (!allowedRoles.has(role)) return;
+  const member = workspaceMembers.find((candidate) => candidate.userId === userId);
+  if (!member || member.role === "owner") return;
+  const client = getSupabaseClient();
+  const { error } = await client
+    .from("workspace_members")
+    .update({ role })
+    .eq("workspace_id", currentWorkspaceId)
+    .eq("user_id", userId);
+  if (error) {
+    showRealtimeConflictNotice(error.message || "Could not update member role.");
+    return;
+  }
+  await loadWorkspaceMembers();
+}
+
+async function removeWorkspaceMember(userId) {
+  if (!currentWorkspaceId || !canManageWorkspaceMembers()) return;
+  const member = workspaceMembers.find((candidate) => candidate.userId === userId);
+  if (!member || member.role === "owner" || member.userId === currentUser?.id) return;
+  if (!await confirmDangerousAction(`Remove ${member.displayName || "this member"} from the workspace?`)) return;
+  const client = getSupabaseClient();
+  const { error } = await client
+    .from("workspace_members")
+    .delete()
+    .eq("workspace_id", currentWorkspaceId)
+    .eq("user_id", userId);
+  if (error) {
+    showRealtimeConflictNotice(error.message || "Could not remove member.");
+    return;
+  }
+  await loadWorkspaceMembers();
 }
 
 async function acceptWorkspaceInvite(token) {
@@ -480,6 +559,8 @@ async function createInviteLink() {
         expires_at: expiresAt
       });
     if (error) throw error;
+    logProjectEvent("Member invited", "Workspace invite", currentWorkspaceId);
+    saveState({ forceStep: true });
 
     const url = new URL(window.location.href);
     url.search = "";
@@ -539,9 +620,15 @@ async function subscribeToWorkspace() {
       filter: `id=eq.${currentWorkspaceId}`
     }, (payload) => {
       if (!payload?.new?.state || applyingRemoteState) return;
-      if (interactionLock) return;
+      if (interactionLock) {
+        showRealtimeConflictNotice();
+        return;
+      }
       const remoteStamp = Number(payload.new.state.updatedAt) || 0;
-      if (remoteStamp < latestLocalStateStamp) return;
+      if (remoteStamp < latestLocalStateStamp) {
+        showRealtimeConflictNotice("Your local board has newer changes than the remote version.");
+        return;
+      }
       applyingRemoteState = true;
       state = payload.new.state;
       latestLocalStateStamp = Math.max(latestLocalStateStamp, remoteStamp);
@@ -551,6 +638,14 @@ async function subscribeToWorkspace() {
       applyingRemoteState = false;
     })
     .on("broadcast", { event: "cursor" }, (payload) => handleRemoteCursor(payload))
+    .on("postgres_changes", {
+      event: "*",
+      schema: "public",
+      table: "workspace_members",
+      filter: `workspace_id=eq.${currentWorkspaceId}`
+    }, () => {
+      loadWorkspaceMembers();
+    })
     .subscribe((status) => {
       cursorChannelReady = status === "SUBSCRIBED";
       if (cursorChannelReady) broadcastCursor(lastBoardPoint, true);

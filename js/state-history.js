@@ -31,10 +31,12 @@ function normalizeTaskBoard(project) {
   }));
 
   const columnIds = new Set(project.taskColumns.map((column) => column.id));
+  const incomingTaskIds = new Set((Array.isArray(project.tasks) ? project.tasks : []).map((task) => task.id).filter(Boolean));
   const todoColumn = project.taskColumns.find((column) => column.id === "todo") || project.taskColumns[0];
   const doneColumn = project.taskColumns.find((column) => column.id === "done") || project.taskColumns.find((column) => column.title.toLowerCase() === "done") || project.taskColumns[project.taskColumns.length - 1];
   const orderByColumn = new Map();
   const teamMemberIds = new Set((Array.isArray(project.teamRoles) ? project.teamRoles : []).map((member) => member.id).filter(Boolean));
+  const priorities = new Set(["low", "medium", "high", "critical"]);
   project.tasks = (Array.isArray(project.tasks) ? project.tasks : []).map((task) => {
     const fallbackColumnId = task.done ? doneColumn.id : todoColumn.id;
     const columnId = columnIds.has(task.columnId) ? task.columnId : fallbackColumnId;
@@ -43,6 +45,19 @@ function normalizeTaskBoard(project) {
     const assigneeIds = Array.isArray(task.assigneeIds)
       ? task.assigneeIds.filter((id) => !teamMemberIds.size || teamMemberIds.has(id))
       : [];
+    const priority = priorities.has(task.priority) ? task.priority : "medium";
+    const deadline = /^\d{4}-\d{2}-\d{2}$/.test(String(task.deadline || "")) ? String(task.deadline) : "";
+    const tags = Array.isArray(task.tags)
+      ? task.tags.map((tag) => cleanUserText(tag, 32)).filter(Boolean).slice(0, 12)
+      : String(task.tags || "").split(",").map((tag) => cleanUserText(tag, 32)).filter(Boolean).slice(0, 12);
+    const checklist = (Array.isArray(task.checklist) ? task.checklist : []).map((item) => ({
+      id: item.id || crypto.randomUUID(),
+      text: cleanUserText(item.text, 120, "Checklist item"),
+      done: Boolean(item.done)
+    })).slice(0, 50);
+    const dependencyIds = (Array.isArray(task.dependencyIds) ? task.dependencyIds : [])
+      .filter((id) => incomingTaskIds.has(id) && id !== task.id)
+      .slice(0, 30);
     return {
       id: task.id || crypto.randomUUID(),
       title: String(task.title || "New task"),
@@ -52,9 +67,48 @@ function normalizeTaskBoard(project) {
       estimateHours: clamp(Number(task.estimateHours) || 0, 0, 999),
       progress: clamp(Number(task.progress) || 0, 0, 100),
       description: String(task.description || ""),
-      assigneeIds
+      assigneeIds,
+      priority,
+      deadline,
+      tags,
+      checklist,
+      dependencyIds,
+      linkedItemId: task.linkedItemId ? String(task.linkedItemId) : ""
     };
   });
+}
+
+function normalizeMilestones(project) {
+  const statuses = new Set(["planned", "active", "blocked", "done"]);
+  project.milestones = (Array.isArray(project.milestones) && project.milestones.length ? project.milestones : createDefaultMilestones())
+    .map((milestone, index) => {
+      return {
+        id: milestone.id || crypto.randomUUID(),
+        name: cleanUserText(milestone.name, 80, `Milestone ${index + 1}`),
+        description: String(milestone.description || "").slice(0, 2000),
+        deadline: /^\d{4}-\d{2}-\d{2}$/.test(String(milestone.deadline || "")) ? String(milestone.deadline) : "",
+        taskIds: [],
+        progress: milestone.status === "done" ? 100 : clamp(Number(milestone.progress) || 0, 0, 100),
+        status: statuses.has(milestone.status) ? milestone.status : "planned",
+        order: Number.isFinite(Number(milestone.order)) ? Number(milestone.order) : index
+      };
+    })
+    .sort((a, b) => a.order - b.order)
+    .map((milestone, index) => ({ ...milestone, order: index }));
+}
+
+function normalizeProjectHistory(project) {
+  project.history = (Array.isArray(project.history) ? project.history : [])
+    .map((event) => ({
+      id: event.id || crypto.randomUUID(),
+      user: cleanUserText(event.user, 80, "Unknown"),
+      action: cleanUserText(event.action, 120, "Updated project"),
+      target: cleanUserText(event.target, 120, ""),
+      targetId: event.targetId ? String(event.targetId) : "",
+      at: event.at || new Date().toISOString()
+    }))
+    .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+    .slice(0, 300);
 }
 
 function normalizeHourPlan(project) {
@@ -92,6 +146,14 @@ function normalizeState() {
     project.connections ??= [];
     normalizeHourPlan(project);
     normalizeTaskBoard(project);
+    normalizeMilestones(project);
+    normalizeProjectHistory(project);
+    project.gdd = {
+      concept: String(project.gdd?.concept || "").slice(0, 3000),
+      genre: cleanUserText(project.gdd?.genre, 120, ""),
+      characters: String(project.gdd?.characters || "").slice(0, 3000),
+      mechanics: String(project.gdd?.mechanics || "").slice(0, 3000)
+    };
     project.story = normalizeStoryNodes(project.story);
     project.teamRoles = (Array.isArray(project.teamRoles) ? project.teamRoles : []).map((member) => ({
       id: member.id || crypto.randomUUID(),
@@ -113,6 +175,8 @@ function normalizeState() {
       const normalized = {
         color: DEFAULT_CONNECTION_COLOR,
         thickness: DEFAULT_CONNECTION_THICKNESS,
+        borderColor: "#ffffff",
+        borderThickness: 2,
         manualBend: false,
         manualPoints: [],
         snapToGrid: false,
@@ -123,16 +187,22 @@ function normalizeState() {
             .filter((point) => Number.isFinite(point?.x) && Number.isFinite(point?.y))
             .map((point) => normalizeConnectionPoint(point, connection.snapToGrid === true))
           : [],
-        thickness: clamp(Number(connection.thickness) || DEFAULT_CONNECTION_THICKNESS, 1, 14)
+        thickness: clamp(Number(connection.thickness) || DEFAULT_CONNECTION_THICKNESS, 1, 14),
+        borderColor: normalizeHexColor(connection.borderColor || "#ffffff", "#ffffff"),
+        borderThickness: clamp(Number(connection.borderThickness ?? 2) || 0, 0, 10)
       };
       delete normalized.manualRoute;
       return normalized;
     });
     project.items = (project.items || []).map((item) => ({
       ...item,
+      name: cleanUserText(item.name || item.text || htmlToPlainTextFallback(item.html), 80, "New board"),
       type: item.type === "note" ? "ticket" : item.type,
       shape: item.shape || "circle",
       color: item.color || ticketColors[0],
+      borderColor: normalizeHexColor(item.borderColor || "#1d2733", "#1d2733"),
+      borderThickness: clamp(Number(item.borderThickness ?? (item.type === "shape" ? 2 : 1)) || 0, 0, 14),
+      snapToGrid: item.snapToGrid === true,
       html: item.html || escapeHtml(item.text || ""),
       captionOpen: item.type === "image" ? Boolean(item.captionOpen) : true,
       textStyle: {

@@ -139,6 +139,16 @@ function cleanUserText(value, maxLength = 120, fallback = "") {
   return cleaned ? cleaned.slice(0, maxLength) : fallback;
 }
 
+function htmlToPlainTextFallback(html = "") {
+  const template = document.createElement("template");
+  template.innerHTML = String(html || "").replace(/<br\s*\/?>/gi, "\n");
+  return template.content.textContent || "";
+}
+
+function getBoardItemName(item, fallback = "Board item") {
+  return cleanUserText(item?.name || item?.text || htmlToPlainTextFallback(item?.html), 80, fallback);
+}
+
 function confirmDangerousAction(message) {
   return new Promise((resolve) => {
     document.querySelector(".delete-confirm-backdrop")?.remove();
@@ -178,6 +188,16 @@ function confirmDangerousAction(message) {
     document.body.append(backdrop);
     backdrop.querySelector(".delete-confirm-cancel").focus();
   });
+}
+
+function showRealtimeConflictNotice(message = "Another teammate changed this board while you were editing. Review before continuing.") {
+  document.querySelector(".realtime-conflict-toast")?.remove();
+  const toast = document.createElement("div");
+  toast.className = "realtime-conflict-toast";
+  toast.setAttribute("role", "status");
+  toast.textContent = message;
+  document.body.append(toast);
+  window.setTimeout(() => toast.remove(), 6500);
 }
 
 function normalizeHexColor(value, fallback = "#fff1b8") {

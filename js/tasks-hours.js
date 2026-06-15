@@ -3,6 +3,12 @@ let draggedTaskColumnStartOrder = [];
 let taskColumnDropCommitted = false;
 let draggedTaskCardState = null;
 const TASK_CARD_DRAG_THRESHOLD = 6;
+const TASK_PRIORITIES = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  critical: "Critical"
+};
 
 function renderTasks() {
   const project = getActiveProject();
@@ -13,9 +19,11 @@ function renderTasks() {
   }
 
   normalizeTaskBoard(project);
+  syncTaskFilterOptions(project);
   const doneColumn = getDoneTaskColumn(project);
   const done = project.tasks.filter((task) => task.columnId === doneColumn.id).length;
-  taskCount.textContent = `${done}/${project.tasks.length}`;
+  const visibleTasks = getFilteredTasks(project);
+  taskCount.textContent = `${visibleTasks.length}/${project.tasks.length} shown · ${done} done`;
 
   const board = document.createElement("div");
   board.className = "kanban-board";
@@ -32,7 +40,7 @@ function renderTasks() {
 }
 
 function createTaskColumnNode(project, column, index, columnCount) {
-  const columnTasks = getTasksForColumn(project, column.id);
+  const columnTasks = getFilteredTasksForColumn(project, column.id);
   const columnNode = document.createElement("section");
   columnNode.className = "kanban-column";
   columnNode.dataset.columnId = column.id;
@@ -152,16 +160,83 @@ function createTaskColumnNode(project, column, index, columnCount) {
   return columnNode;
 }
 
+function syncTaskFilterOptions(project) {
+  const selectedPerson = taskFilterPerson.value;
+  const selectedStatus = taskFilterStatus.value;
+  taskFilterPerson.innerHTML = `<option value="">All people</option>`;
+  (project.teamRoles || []).forEach((member) => {
+    const option = document.createElement("option");
+    option.value = member.id;
+    option.textContent = member.name || member.role || "Member";
+    taskFilterPerson.append(option);
+  });
+  taskFilterPerson.value = [...taskFilterPerson.options].some((option) => option.value === selectedPerson) ? selectedPerson : "";
+
+  taskFilterStatus.innerHTML = `<option value="">All status</option>`;
+  getOrderedTaskColumns(project).forEach((column) => {
+    const option = document.createElement("option");
+    option.value = column.id;
+    option.textContent = column.title;
+    taskFilterStatus.append(option);
+  });
+  taskFilterStatus.value = [...taskFilterStatus.options].some((option) => option.value === selectedStatus) ? selectedStatus : "";
+}
+
+function getTaskFilterState() {
+  return {
+    search: cleanUserText(taskSearch.value, 120).toLowerCase(),
+    personId: taskFilterPerson.value,
+    statusId: taskFilterStatus.value,
+    priority: taskFilterPriority.value
+  };
+}
+
+function getFilteredTasks(project) {
+  const filters = getTaskFilterState();
+  return (project.tasks || []).filter((task) => {
+    if (filters.personId && !(task.assigneeIds || []).includes(filters.personId)) return false;
+    if (filters.statusId && task.columnId !== filters.statusId) return false;
+    if (filters.priority && task.priority !== filters.priority) return false;
+    if (!filters.search) return true;
+    const linkedItem = task.linkedItemId ? project.items?.find((item) => item.id === task.linkedItemId) : null;
+    const haystack = [
+      task.title,
+      task.description,
+      task.deadline,
+      getBoardItemName(linkedItem, ""),
+      TASK_PRIORITIES[task.priority],
+      ...(task.tags || []),
+      ...(task.checklist || []).map((item) => item.text)
+    ].join(" ").toLowerCase();
+    return haystack.includes(filters.search);
+  });
+}
+
+function getFilteredTasksForColumn(project, columnId) {
+  const visibleIds = new Set(getFilteredTasks(project).map((task) => task.id));
+  return getTasksForColumn(project, columnId).filter((task) => visibleIds.has(task.id));
+}
+
 function createTaskCardNode(project, task) {
   const members = project.teamRoles || [];
   const assigneeIds = Array.isArray(task.assigneeIds) ? task.assigneeIds : [];
   const progress = clamp(Number(task.progress) || 0, 0, 100);
+  const checklist = Array.isArray(task.checklist) ? task.checklist : [];
+  const checklistDone = checklist.filter((item) => item.done).length;
+  const dependencyCount = (task.dependencyIds || []).length;
+  const blocked = dependencyCount && !areTaskDependenciesDone(project, task);
+  const linkedItem = task.linkedItemId ? project.items?.find((item) => item.id === task.linkedItemId) : null;
   const card = document.createElement("article");
   card.className = "kanban-card";
+  card.classList.add(`priority-${task.priority || "medium"}`);
   card.draggable = false;
   card.dataset.taskId = task.id;
   card.addEventListener("dragstart", (event) => event.preventDefault());
   card.addEventListener("pointerdown", (event) => startTaskCardDrag(event, task.id, card));
+  card.addEventListener("click", (event) => {
+    if (!task.linkedItemId || event.target.closest(".kanban-card-controls, button, input, label, details, summary")) return;
+    showTaskBoardLink(task.id, task.linkedItemId);
+  });
 
   const title = document.createElement("div");
   title.className = "kanban-card-title";
@@ -173,7 +248,18 @@ function createTaskCardNode(project, task) {
   const selectedMarkup = selectedMembers.length
     ? selectedMembers.map((member) => `<span class="kanban-person-chip">${escapeHtml(member.name || member.role || "Member")}</span>`).join("")
     : `<span class="kanban-no-team">No people assigned</span>`;
+  const tagMarkup = (task.tags || []).length
+    ? `<div class="kanban-tags">${task.tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}</div>`
+    : "";
   meta.innerHTML = `
+    <div class="kanban-card-badges">
+      <span class="priority-chip priority-${escapeHtml(task.priority || "medium")}">${escapeHtml(TASK_PRIORITIES[task.priority] || "Medium")}</span>
+      ${task.deadline ? `<span class="deadline-chip">${escapeHtml(task.deadline)}</span>` : ""}
+      ${checklist.length ? `<span class="checklist-chip">${checklistDone}/${checklist.length}</span>` : ""}
+      ${dependencyCount ? `<span class="dependency-chip ${blocked ? "blocked" : ""}">${blocked ? "Blocked by dependency" : `${dependencyCount} deps`}</span>` : ""}
+      ${linkedItem ? `<span class="linked-chip">${escapeHtml(getBoardItemName(linkedItem))}</span>` : ""}
+    </div>
+    ${tagMarkup}
     <div class="kanban-progress-summary" aria-label="Progress">
       <span class="kanban-progress-label">${progress}% done</span>
       <span class="kanban-progress-track"><span style="width: ${progress}%"></span></span>
@@ -291,6 +377,13 @@ function commitTaskCardDomOrder(taskId, columnId) {
     candidate.columnId = columnId;
     candidate.order = index;
   });
+  if (columnId === getDoneTaskColumn(project).id && !areTaskDependenciesDone(project, task)) {
+    project.tasks = beforeTasks;
+    project.taskColumns = beforeColumns;
+    warnBlockedTask(task);
+    render();
+    return;
+  }
   if (previousColumnId !== columnId) reorderTasksInColumn(project, previousColumnId);
 
   const changedColumn = previousColumnId !== columnId;
@@ -396,6 +489,15 @@ function saveTaskBoardChange(project, beforeTasks, beforeColumns, groupKey) {
   render();
 }
 
+function areTaskDependenciesDone(project, task) {
+  const dependencyIds = Array.isArray(task.dependencyIds) ? task.dependencyIds : [];
+  return dependencyIds.every((id) => project.tasks.find((candidate) => candidate.id === id)?.done);
+}
+
+function warnBlockedTask(task) {
+  showRealtimeConflictNotice(`"${task.title}" is blocked by unfinished dependencies.`);
+}
+
 function addTaskColumn(title) {
   const project = getActiveProject();
   if (!project) return;
@@ -479,8 +581,14 @@ function addTaskToColumn(columnId, title) {
     estimateHours: 0,
     progress: 0,
     description: "",
-    assigneeIds: []
+    assigneeIds: [],
+    priority: "medium",
+    deadline: "",
+    tags: [],
+    checklist: [],
+    linkedItemId: ""
   });
+  logProjectEvent("Task created", cleanedTitle);
   saveTaskBoardChange(project, beforeTasks, beforeColumns, `project:${project.id}:tasks`);
 }
 
@@ -509,6 +617,38 @@ function updateTaskDetails(taskId, updates) {
   if (Object.prototype.hasOwnProperty.call(updates, "description")) {
     task.description = String(updates.description || "").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "").slice(0, 5000);
   }
+  if (Object.prototype.hasOwnProperty.call(updates, "priority")) {
+    const priority = String(updates.priority || "").toLowerCase();
+    task.priority = TASK_PRIORITIES[priority] ? priority : "medium";
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, "deadline")) {
+    const value = String(updates.deadline || "");
+    task.deadline = /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : "";
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, "tags")) {
+    task.tags = (Array.isArray(updates.tags) ? updates.tags : String(updates.tags || "").split(","))
+      .map((tag) => cleanUserText(tag, 32))
+      .filter(Boolean)
+      .slice(0, 12);
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, "checklist")) {
+    task.checklist = (Array.isArray(updates.checklist) ? updates.checklist : [])
+      .map((item) => ({
+        id: item.id || crypto.randomUUID(),
+        text: cleanUserText(item.text, 120, "Checklist item"),
+        done: Boolean(item.done)
+      }))
+      .slice(0, 50);
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, "dependencyIds")) {
+    const taskIds = new Set(project.tasks.map((candidate) => candidate.id));
+    task.dependencyIds = (Array.isArray(updates.dependencyIds) ? updates.dependencyIds : [])
+      .filter((id) => taskIds.has(id) && id !== task.id)
+      .slice(0, 30);
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, "linkedItemId")) {
+    task.linkedItemId = project.items?.some((item) => item.id === updates.linkedItemId) ? updates.linkedItemId : "";
+  }
   if (Object.prototype.hasOwnProperty.call(updates, "progress")) {
     task.progress = clamp(Number(updates.progress) || 0, 0, 100);
   }
@@ -520,11 +660,19 @@ function updateTaskDetails(taskId, updates) {
   if (Object.prototype.hasOwnProperty.call(updates, "columnId")) {
     const nextColumn = project.taskColumns.find((column) => column.id === updates.columnId);
     if (nextColumn && nextColumn.id !== task.columnId) {
+      if (nextColumn.id === getDoneTaskColumn(project).id && !areTaskDependenciesDone(project, task)) {
+        warnBlockedTask(task);
+        return;
+      }
       const previousColumnId = task.columnId;
       task.columnId = nextColumn.id;
       task.order = getTasksForColumn(project, nextColumn.id).length;
       reorderTasksInColumn(project, previousColumnId);
+      if (nextColumn.id === getDoneTaskColumn(project).id) logProjectEvent("Task completed", task.title, task.id);
     }
+  }
+  if (!Object.prototype.hasOwnProperty.call(updates, "columnId")) {
+    logProjectEvent("Task edited", task.title, task.id);
   }
   saveTaskBoardChange(project, beforeTasks, beforeColumns, `project:${project.id}:task:${taskId}:details`);
 }
@@ -539,7 +687,10 @@ function openTaskIssueDialog(taskId) {
   const members = project.teamRoles || [];
   const assigneeIds = Array.isArray(task.assigneeIds) ? task.assigneeIds : [];
   const progress = clamp(Number(task.progress) || 0, 0, 100);
+  const checklist = Array.isArray(task.checklist) ? task.checklist : [];
   const column = columns.find((candidate) => candidate.id === task.columnId) || columns[0];
+  const boardItems = (project.items || []).filter((item) => item.type !== "image");
+  const dependencyOptions = (project.tasks || []).filter((candidate) => candidate.id !== task.id);
   const dialog = document.createElement("div");
   dialog.className = "task-issue-backdrop";
   dialog.innerHTML = `
@@ -556,20 +707,52 @@ function openTaskIssueDialog(taskId) {
       </div>
       <aside class="task-issue-sidebar">
         <button type="button" class="task-issue-close" aria-label="Close issue">x</button>
-        <label class="task-issue-field">
+        <div class="task-issue-field">
           <span>Status</span>
-          <select class="task-issue-status">
-            ${columns.map((candidate) => `<option value="${escapeHtml(candidate.id)}" ${candidate.id === task.columnId ? "selected" : ""}>${escapeHtml(candidate.title)}</option>`).join("")}
-          </select>
+          <div class="task-issue-segmented task-issue-status" role="group" aria-label="Task status">
+            ${columns.map((candidate) => `<button type="button" data-value="${escapeHtml(candidate.id)}" class="${candidate.id === task.columnId ? "active" : ""}" style="--segment-color: ${escapeHtml(candidate.color || "#434bd7")}">${escapeHtml(candidate.title)}</button>`).join("")}
+          </div>
+        </div>
+        <div class="task-issue-field">
+          <span>Priority</span>
+          <div class="task-issue-segmented task-issue-priority" role="group" aria-label="Task priority">
+            ${Object.entries(TASK_PRIORITIES).map(([value, label]) => `<button type="button" data-value="${value}" class="priority-${value} ${value === task.priority ? "active" : ""}">${label}</button>`).join("")}
+          </div>
+        </div>
+        <label class="task-issue-field">
+          <span>Deadline</span>
+          <input class="task-issue-deadline" type="date" value="${escapeHtml(task.deadline || "")}" />
         </label>
+        <label class="task-issue-field">
+          <span>Tags</span>
+          <input class="task-issue-tags" type="text" value="${escapeHtml((task.tags || []).join(", "))}" placeholder="combat, boss, polish" />
+        </label>
+        <div class="task-issue-field">
+          <span>Linked board element</span>
+          <div class="task-issue-segmented task-issue-linked-item task-issue-link-options" role="group" aria-label="Linked board element">
+            <button type="button" data-value="" class="${!task.linkedItemId ? "active" : ""}">No board link</button>
+            ${boardItems.map((item) => `<button type="button" data-value="${escapeHtml(item.id)}" class="${item.id === task.linkedItemId ? "active" : ""}">${escapeHtml(getBoardItemName(item))}</button>`).join("")}
+          </div>
+          ${task.linkedItemId ? `<button type="button" class="task-issue-go-board">Go to board item</button>` : ""}
+        </div>
+        <div class="task-issue-field">
+          <span>Dependencies</span>
+          <div class="task-dependency-editor">
+            ${dependencyOptions.length ? dependencyOptions.map((candidate) => `
+              <label class="task-dependency-row">
+                <input type="checkbox" value="${escapeHtml(candidate.id)}" ${(task.dependencyIds || []).includes(candidate.id) ? "checked" : ""} />
+                <span>${escapeHtml(candidate.title)}</span>
+              </label>
+            `).join("") : `<span class="kanban-no-team">Create another task first</span>`}
+          </div>
+        </div>
         <label class="task-issue-field">
           <span>Progress</span>
           <div class="task-issue-progress">
-            <input class="task-issue-progress-range" type="range" min="0" max="100" step="1" value="${progress}" />
+            <input class="task-issue-progress-range" type="range" min="0" max="100" step="1" value="${progress}" style="--progress-value: ${progress}%" />
             <input class="task-issue-progress-number" type="number" min="0" max="100" step="1" value="${progress}" aria-label="Progress percent" />
             <strong>%</strong>
           </div>
-          <span class="task-issue-progress-track"><span style="width: ${progress}%"></span></span>
         </label>
         <div class="task-issue-field">
           <span>People</span>
@@ -582,6 +765,19 @@ function openTaskIssueDialog(taskId) {
             `).join("") : `<span class="kanban-no-team">Add team members first</span>`}
           </div>
         </div>
+        <div class="task-issue-field">
+          <span>Checklist</span>
+          <div class="task-checklist-editor">
+            ${checklist.map((item) => `
+              <label class="task-checklist-row" data-checklist-id="${escapeHtml(item.id)}">
+                <input type="checkbox" ${item.done ? "checked" : ""} />
+                <input type="text" value="${escapeHtml(item.text)}" />
+                <button type="button" title="Remove checklist item">x</button>
+              </label>
+            `).join("")}
+          </div>
+          <button type="button" class="task-checklist-add">+ Checklist item</button>
+        </div>
         <div class="task-issue-meta">
           <span style="--column-color: ${escapeHtml(column?.color || "#434bd7")}"></span>
           <strong>${escapeHtml(column?.title || "Status")}</strong>
@@ -592,23 +788,35 @@ function openTaskIssueDialog(taskId) {
   `;
 
   const close = () => dialog.remove();
+  const readChecklist = () => Array.from(dialog.querySelectorAll(".task-checklist-row")).map((row) => ({
+    id: row.dataset.checklistId || crypto.randomUUID(),
+    done: row.querySelector("input[type='checkbox']").checked,
+    text: row.querySelector("input[type='text']").value
+  })).filter((item) => cleanUserText(item.text, 120));
   const save = () => {
     const range = dialog.querySelector(".task-issue-progress-range");
     const checkedPeople = Array.from(dialog.querySelectorAll(".task-issue-people input:checked")).map((input) => input.value);
     updateTaskDetails(task.id, {
       title: dialog.querySelector(".task-issue-title").value,
       description: dialog.querySelector(".task-issue-description").value,
+      priority: dialog.querySelector(".task-issue-priority button.active")?.dataset.value || "medium",
+      deadline: dialog.querySelector(".task-issue-deadline").value,
+      tags: dialog.querySelector(".task-issue-tags").value,
+      checklist: readChecklist(),
+      dependencyIds: Array.from(dialog.querySelectorAll(".task-dependency-editor input:checked")).map((input) => input.value),
+      linkedItemId: dialog.querySelector(".task-issue-linked-item button.active")?.dataset.value || "",
       progress: Number(range.value),
-      columnId: dialog.querySelector(".task-issue-status").value,
+      columnId: dialog.querySelector(".task-issue-status button.active")?.dataset.value || task.columnId,
       assigneeIds: checkedPeople
     });
     close();
   };
   const syncProgress = (value) => {
     const nextValue = String(clamp(Number(value) || 0, 0, 100));
-    dialog.querySelector(".task-issue-progress-range").value = nextValue;
+    const range = dialog.querySelector(".task-issue-progress-range");
+    range.value = nextValue;
+    range.style.setProperty("--progress-value", `${nextValue}%`);
     dialog.querySelector(".task-issue-progress-number").value = nextValue;
-    dialog.querySelector(".task-issue-progress-track span").style.width = `${nextValue}%`;
   };
 
   dialog.addEventListener("click", (event) => {
@@ -616,6 +824,39 @@ function openTaskIssueDialog(taskId) {
   });
   dialog.querySelector(".task-issue-close").addEventListener("click", close);
   dialog.querySelector(".task-issue-save").addEventListener("click", save);
+  dialog.querySelector(".task-issue-go-board")?.addEventListener("click", () => {
+    const itemId = dialog.querySelector(".task-issue-linked-item button.active")?.dataset.value || task.linkedItemId;
+    if (!itemId) return;
+    close();
+    openSidePanel("tasks");
+    taskSearch.value = "";
+    renderTasks();
+    focusBoardItem(itemId);
+    showTaskBoardLink(task.id, itemId);
+  });
+  dialog.querySelectorAll(".task-issue-segmented").forEach((group) => {
+    group.addEventListener("click", (event) => {
+      const button = event.target.closest("button");
+      if (!button) return;
+      group.querySelectorAll("button").forEach((candidate) => candidate.classList.toggle("active", candidate === button));
+    });
+  });
+  dialog.querySelector(".task-checklist-add").addEventListener("click", () => {
+    const row = document.createElement("label");
+    row.className = "task-checklist-row";
+    row.dataset.checklistId = crypto.randomUUID();
+    row.innerHTML = `
+      <input type="checkbox" />
+      <input type="text" value="" placeholder="Checklist item" />
+      <button type="button" title="Remove checklist item">x</button>
+    `;
+    row.querySelector("button").addEventListener("click", () => row.remove());
+    dialog.querySelector(".task-checklist-editor").append(row);
+    row.querySelector("input[type='text']").focus();
+  });
+  dialog.querySelectorAll(".task-checklist-row button").forEach((button) => {
+    button.addEventListener("click", () => button.closest(".task-checklist-row")?.remove());
+  });
   dialog.querySelector(".task-issue-progress-range").addEventListener("input", (event) => syncProgress(event.target.value));
   dialog.querySelector(".task-issue-progress-number").addEventListener("input", (event) => syncProgress(event.target.value));
   dialog.addEventListener("keydown", (event) => {
@@ -624,6 +865,40 @@ function openTaskIssueDialog(taskId) {
   });
   document.body.append(dialog);
   dialog.querySelector(".task-issue-title").focus();
+}
+
+function showTaskBoardLink(taskId, itemId) {
+  document.querySelector(".task-board-link-line")?.remove();
+  const boardNode = boardContent.querySelector(`.board-item[data-id="${CSS.escape(itemId)}"]`);
+  const taskNode = tasksList.querySelector(`.kanban-card[data-task-id="${CSS.escape(taskId)}"]`);
+  if (!boardNode || !taskNode) return;
+
+  boardNode.classList.add("link-focus-pulse");
+  taskNode.classList.add("link-focus-pulse");
+  window.setTimeout(() => {
+    boardNode.classList.remove("link-focus-pulse");
+    taskNode.classList.remove("link-focus-pulse");
+  }, 1600);
+
+  const boardRect = boardNode.getBoundingClientRect();
+  const taskRect = taskNode.getBoundingClientRect();
+  const start = {
+    x: boardRect.left + boardRect.width / 2,
+    y: boardRect.top + boardRect.height / 2
+  };
+  const end = {
+    x: taskRect.left,
+    y: taskRect.top + taskRect.height / 2
+  };
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "task-board-link-line");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  const midX = start.x + (end.x - start.x) * 0.55;
+  path.setAttribute("d", `M ${start.x} ${start.y} C ${midX} ${start.y}, ${midX} ${end.y}, ${end.x} ${end.y}`);
+  svg.append(path);
+  document.body.append(svg);
+  window.setTimeout(() => svg.remove(), 2600);
 }
 
 async function deleteTask(taskId) {
@@ -653,6 +928,11 @@ function moveTaskToColumn(taskId, columnId) {
   const project = getActiveProject();
   const task = project?.tasks.find((candidate) => candidate.id === taskId);
   if (!project || !task || task.columnId === columnId) return;
+  if (columnId === getDoneTaskColumn(project).id && !areTaskDependenciesDone(project, task)) {
+    warnBlockedTask(task);
+    render();
+    return;
+  }
   const beforeTasks = structuredClone(project.tasks);
   const beforeColumns = structuredClone(project.taskColumns);
   const previousColumnId = task.columnId;
@@ -660,6 +940,7 @@ function moveTaskToColumn(taskId, columnId) {
   task.columnId = columnId;
   task.order = nextOrder;
   reorderTasksInColumn(project, previousColumnId);
+  if (columnId === getDoneTaskColumn(project).id) logProjectEvent("Task completed", task.title, task.id);
   saveTaskBoardChange(project, beforeTasks, beforeColumns, `project:${project.id}:task:${taskId}:move`);
 }
 

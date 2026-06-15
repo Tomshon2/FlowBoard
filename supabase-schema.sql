@@ -21,10 +21,19 @@ create table if not exists public.workspaces (
 create table if not exists public.workspace_members (
   workspace_id uuid not null references public.workspaces(id) on delete cascade,
   user_id uuid not null references auth.users(id) on delete cascade,
-  role text not null default 'member' check (role in ('owner', 'member')),
+  role text not null default 'editor' check (role in ('owner', 'admin', 'editor', 'viewer', 'guest')),
   created_at timestamptz not null default now(),
   primary key (workspace_id, user_id)
 );
+
+alter table public.workspace_members drop constraint if exists workspace_members_role_check;
+alter table public.workspace_members alter column role set default 'editor';
+update public.workspace_members
+set role = 'editor'
+where role = 'member';
+alter table public.workspace_members
+add constraint workspace_members_role_check
+check (role in ('owner', 'admin', 'editor', 'viewer', 'guest'));
 
 create table if not exists public.workspace_invites (
   id uuid primary key default gen_random_uuid(),
@@ -73,6 +82,37 @@ as $$
   );
 $$;
 
+create or replace function private.workspace_role(target_workspace_id uuid, target_user_id uuid)
+returns text
+language sql
+security definer
+set search_path = public
+as $$
+  select role
+  from public.workspace_members
+  where workspace_id = target_workspace_id
+    and user_id = target_user_id
+  limit 1;
+$$;
+
+create or replace function private.can_edit_workspace(target_workspace_id uuid, target_user_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select coalesce(private.workspace_role(target_workspace_id, target_user_id), '') in ('owner', 'admin', 'editor');
+$$;
+
+create or replace function private.can_manage_workspace(target_workspace_id uuid, target_user_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select coalesce(private.workspace_role(target_workspace_id, target_user_id), '') in ('owner', 'admin');
+$$;
+
 create or replace function public.touch_updated_at()
 returns trigger
 language plpgsql
@@ -104,7 +144,7 @@ begin
   end if;
 
   insert into public.workspace_members (workspace_id, user_id, role)
-  values (invited_workspace_id, auth.uid(), 'member')
+  values (invited_workspace_id, auth.uid(), 'editor')
   on conflict (workspace_id, user_id) do nothing;
 
   return invited_workspace_id;
@@ -166,11 +206,11 @@ on public.workspaces for update
 to authenticated
 using (
   owner_id = auth.uid()
-  or private.is_workspace_member(id, auth.uid())
+  or private.can_edit_workspace(id, auth.uid())
 )
 with check (
   owner_id = auth.uid()
-  or private.is_workspace_member(id, auth.uid())
+  or private.can_edit_workspace(id, auth.uid())
 );
 
 drop policy if exists "owners can delete their workspaces" on public.workspaces;
@@ -193,7 +233,7 @@ create policy "owners can add workspace memberships"
 on public.workspace_members for insert
 to authenticated
 with check (
-  private.is_workspace_owner(workspace_id, auth.uid())
+  private.can_manage_workspace(workspace_id, auth.uid())
   or (
     user_id = auth.uid()
     and role = 'owner'
@@ -210,8 +250,8 @@ drop policy if exists "owners can update memberships" on public.workspace_member
 create policy "owners can update memberships"
 on public.workspace_members for update
 to authenticated
-using (private.is_workspace_owner(workspace_id, auth.uid()))
-with check (private.is_workspace_owner(workspace_id, auth.uid()));
+using (private.can_manage_workspace(workspace_id, auth.uid()))
+with check (private.can_manage_workspace(workspace_id, auth.uid()));
 
 drop policy if exists "owners can remove memberships" on public.workspace_members;
 create policy "owners can remove memberships"
@@ -219,7 +259,7 @@ on public.workspace_members for delete
 to authenticated
 using (
   user_id = auth.uid()
-  or private.is_workspace_owner(workspace_id, auth.uid())
+  or private.can_manage_workspace(workspace_id, auth.uid())
 );
 
 drop policy if exists "members can read workspace invites" on public.workspace_invites;
@@ -228,7 +268,7 @@ on public.workspace_invites for select
 to authenticated
 using (
   expires_at > now()
-  and private.is_workspace_member(workspace_id, auth.uid())
+  and private.can_manage_workspace(workspace_id, auth.uid())
 );
 
 drop policy if exists "members can create workspace invites" on public.workspace_invites;
@@ -246,7 +286,7 @@ on public.workspace_invites for delete
 to authenticated
 using (
   created_by = auth.uid()
-  or private.is_workspace_owner(workspace_id, auth.uid())
+  or private.can_manage_workspace(workspace_id, auth.uid())
 );
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
@@ -269,7 +309,7 @@ to authenticated
 using (
   bucket_id = 'flowboard-images'
   and (storage.foldername(name))[1] ~* '^[0-9a-f-]{36}$'
-  and private.is_workspace_member((storage.foldername(name))[1]::uuid, auth.uid())
+  and private.can_edit_workspace((storage.foldername(name))[1]::uuid, auth.uid())
 );
 
 drop policy if exists "members can upload workspace images" on storage.objects;
@@ -279,7 +319,7 @@ to authenticated
 with check (
   bucket_id = 'flowboard-images'
   and (storage.foldername(name))[1] ~* '^[0-9a-f-]{36}$'
-  and private.is_workspace_member((storage.foldername(name))[1]::uuid, auth.uid())
+  and private.can_edit_workspace((storage.foldername(name))[1]::uuid, auth.uid())
 );
 
 drop policy if exists "members can replace workspace images" on storage.objects;
@@ -289,12 +329,12 @@ to authenticated
 using (
   bucket_id = 'flowboard-images'
   and (storage.foldername(name))[1] ~* '^[0-9a-f-]{36}$'
-  and private.is_workspace_member((storage.foldername(name))[1]::uuid, auth.uid())
+  and private.can_edit_workspace((storage.foldername(name))[1]::uuid, auth.uid())
 )
 with check (
   bucket_id = 'flowboard-images'
   and (storage.foldername(name))[1] ~* '^[0-9a-f-]{36}$'
-  and private.is_workspace_member((storage.foldername(name))[1]::uuid, auth.uid())
+  and private.can_edit_workspace((storage.foldername(name))[1]::uuid, auth.uid())
 );
 
 drop policy if exists "members can delete workspace images" on storage.objects;
@@ -304,19 +344,28 @@ to authenticated
 using (
   bucket_id = 'flowboard-images'
   and (storage.foldername(name))[1] ~* '^[0-9a-f-]{36}$'
-  and private.is_workspace_member((storage.foldername(name))[1]::uuid, auth.uid())
+  and private.can_edit_workspace((storage.foldername(name))[1]::uuid, auth.uid())
 );
 
 grant usage on schema public to anon, authenticated;
+grant usage on schema private to authenticated;
 grant select, insert, update, delete on public.profiles to authenticated;
 grant select, insert, update, delete on public.workspaces to authenticated;
 grant select, insert, update, delete on public.workspace_members to authenticated;
 grant select, insert, delete on public.workspace_invites to authenticated;
 grant execute on function public.accept_workspace_invite(text) to authenticated;
+grant execute on all functions in schema private to authenticated;
 
 do $$
 begin
   alter publication supabase_realtime add table public.workspaces;
+exception
+  when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  alter publication supabase_realtime add table public.workspace_members;
 exception
   when duplicate_object then null;
 end $$;

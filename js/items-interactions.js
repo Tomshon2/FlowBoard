@@ -27,10 +27,13 @@ function addBoardItem(type, extra = {}, options = {}) {
     y: position.y,
     width,
     height,
+    name: type === "image" ? "Imported image" : "New board",
     text: type === "ticket" ? "New board" : "",
     html: type === "ticket" ? "New board" : "",
     shape: isShape ? "circle" : undefined,
     color: type === "image" ? "#ffffff" : getCreationColor(),
+    borderColor: "#1d2733",
+    borderThickness: isShape ? 2 : 1,
     captionOpen: type !== "image",
     ...extra
   };
@@ -135,6 +138,7 @@ function createTemplateBoard(node, origin) {
   return {
     id: crypto.randomUUID(),
     type: "ticket",
+    name: text,
     x: snapTemplateValue(origin.x + node.x, 0, 6400 - templateBoardSize.width),
     y: snapTemplateValue(origin.y + node.y, 0, 4200 - templateBoardSize.height),
     width: templateBoardSize.width,
@@ -142,6 +146,8 @@ function createTemplateBoard(node, origin) {
     text,
     html: text,
     color: getCreationColor(),
+    borderColor: "#1d2733",
+    borderThickness: 1,
     captionOpen: true
   };
 }
@@ -834,11 +840,15 @@ function syncDrawerButtons() {
   tasksDrawerToggle.setAttribute("aria-expanded", String(sideOpen && targetSidePanel === "tasks"));
   storyDrawerToggle.setAttribute("aria-expanded", String(sideOpen && targetSidePanel === "story"));
   teamDrawerToggle.setAttribute("aria-expanded", String(sideOpen && targetSidePanel === "team"));
+  milestonesDrawerToggle.setAttribute("aria-expanded", String(sideOpen && targetSidePanel === "milestones"));
+  historyDrawerToggle.setAttribute("aria-expanded", String(sideOpen && targetSidePanel === "history"));
   workspaceDrawerToggle.classList.toggle("active", workspaceOpen);
   hoursDrawerToggle.classList.toggle("active", sideOpen && targetSidePanel === "hours");
   tasksDrawerToggle.classList.toggle("active", sideOpen && targetSidePanel === "tasks");
   storyDrawerToggle.classList.toggle("active", sideOpen && targetSidePanel === "story");
   teamDrawerToggle.classList.toggle("active", sideOpen && targetSidePanel === "team");
+  milestonesDrawerToggle.classList.toggle("active", sideOpen && targetSidePanel === "milestones");
+  historyDrawerToggle.classList.toggle("active", sideOpen && targetSidePanel === "history");
   projectsDrawer.setAttribute("aria-hidden", String(!actualWorkspaceOpen));
   sideDrawer.setAttribute("aria-hidden", String(!actualSideOpen));
 }
@@ -874,6 +884,8 @@ function openSidePanel(panelName) {
   setPanelOpen(tasksPanel, toggleTasks, panelName === "tasks");
   setPanelOpen(storyPanel, toggleStory, panelName === "story");
   setPanelOpen(teamPanel, toggleTeam, panelName === "team");
+  setPanelOpen(milestonesPanel, toggleMilestones, panelName === "milestones");
+  setPanelOpen(historyPanel, toggleHistory, panelName === "history");
   app.classList.remove("workspace-open");
   app.classList.add("side-open");
   syncDrawerButtons();

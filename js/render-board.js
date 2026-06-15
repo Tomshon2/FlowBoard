@@ -7,6 +7,9 @@
   renderHours();
   renderStory();
   renderTeamRoles();
+  renderWorkspaceMembers();
+  renderMilestones();
+  renderProjectHistory();
   renderZoom();
   renderPropertiesPanel();
   syncDrawerButtons();
@@ -59,6 +62,15 @@ function renderPropertiesPanel() {
     const color = normalizeHexColor(referenceBoard.color || ticketColors[0]);
     propertiesBoardColor.value = color;
     propertiesBoardHex.value = color;
+    propertiesBoardName.disabled = !editableBoards.length;
+    propertiesBoardName.value = getBoardItemName(referenceBoard, "");
+    propertiesBoardBorderColor.disabled = !editableBoards.length;
+    propertiesBoardBorderThickness.disabled = !editableBoards.length;
+    propertiesBoardBorderColor.value = normalizeHexColor(referenceBoard.borderColor || "#1d2733", "#1d2733");
+    propertiesBoardBorderThickness.value = String(clamp(Number(referenceBoard.borderThickness ?? (referenceBoard.type === "shape" ? 2 : 1)), 0, 14));
+    propertiesBoardBorderThicknessLabel.textContent = `${propertiesBoardBorderThickness.value}px`;
+    propertiesBoardSnapGrid.disabled = !editableBoards.length;
+    propertiesBoardSnapGrid.checked = editableBoards.length ? editableBoards.every((item) => item.snapToGrid === true) : false;
     propertiesBoardColor.disabled = !editableBoards.length;
     propertiesBoardHex.disabled = !editableBoards.length;
     propertiesBoardText.disabled = !editableBoards.length;
@@ -76,6 +88,7 @@ function renderPropertiesPanel() {
     propertiesBold.classList.toggle("active", textStyle.bold);
     propertiesItalic.classList.toggle("active", textStyle.italic);
     propertiesUnderline.classList.toggle("active", textStyle.underline);
+    renderSelectedBoardLinkedTasks(project, selectedBoards.length === 1 ? referenceBoard : null);
   }
 
   if (selectedLine || editingDrawingTool) {
@@ -99,11 +112,121 @@ function renderPropertiesPanel() {
     propertiesLineThickness.value = String(thickness);
     propertiesLineThicknessLabel.textContent = `${thickness}px`;
     const isConnection = Boolean(selectedConnection);
+    const borderColor = selectedConnection ? normalizeHexColor(selectedConnection.borderColor || "#ffffff", "#ffffff") : "#ffffff";
+    const borderThickness = selectedConnection ? clamp(Number(selectedConnection.borderThickness ?? 2) || 0, 0, 10) : 0;
+    propertiesLineBorderColorRow.classList.toggle("hidden", !isConnection);
+    propertiesLineBorderThicknessRow.classList.toggle("hidden", !isConnection);
+    propertiesLineBorderThicknessLabel.classList.toggle("hidden", !isConnection);
+    propertiesLineBorderColor.value = borderColor;
+    propertiesLineBorderThickness.value = String(borderThickness);
+    propertiesLineBorderThicknessLabel.textContent = `${borderThickness}px`;
     connectionSnapRow.classList.toggle("hidden", !isConnection);
     propertiesLineSnapRow.classList.toggle("hidden", !isConnection);
     connectionSnapGrid.checked = isConnection && selectedConnection.snapToGrid === true;
     propertiesLineSnapGrid.checked = isConnection && selectedConnection.snapToGrid === true;
   }
+}
+
+function snapBoardValueToGrid(value, max) {
+  const gridSize = typeof BOARD_GRID_SIZE === "number" && Number.isFinite(BOARD_GRID_SIZE) && BOARD_GRID_SIZE > 0 ? BOARD_GRID_SIZE : 28;
+  return Math.round(clamp(Math.round(value / gridSize) * gridSize, 0, max));
+}
+
+function snapBoardItemToGrid(item) {
+  if (!item) return;
+  item.x = snapBoardValueToGrid(Number(item.x) || 0, 6400 - (item.width || 210));
+  item.y = snapBoardValueToGrid(Number(item.y) || 0, 4200 - (item.height || 140));
+}
+
+function updateSelectedBoardSnapToGrid(enabled) {
+  const project = getActiveProject();
+  const items = getSelectedBoardItems(project).filter((item) => item.type !== "image");
+  if (!project || !items.length) return;
+
+  const commands = [];
+  items.forEach((item) => {
+    const before = structuredClone(item);
+    item.snapToGrid = Boolean(enabled);
+    if (item.snapToGrid) snapBoardItemToGrid(item);
+    commands.push(createHistoryCommand("updateItem", item.id, before, item, { projectId: project.id }));
+  });
+
+  render();
+  renderSelectionClasses();
+  renderConnections(project);
+  renderPropertiesPanel();
+  saveState({
+    historyEntry: createBatchHistoryCommand("updateBoardSnapToGrid", commands, {
+      targetId: items.map((item) => item.id).join(","),
+      groupKey: `items:${items.map((item) => item.id).sort().join(",")}:snapToGrid`
+    })
+  });
+}
+
+function renderSelectedBoardLinkedTasks(project, boardItem) {
+  if (!propertiesLinkedTasks || !propertiesLinkedTaskList) return;
+  propertiesLinkedTaskList.innerHTML = "";
+  propertiesLinkedTasks.classList.toggle("hidden", !boardItem);
+  if (!project || !boardItem) return;
+
+  const linkedTasks = (project.tasks || []).filter((task) => task.linkedItemId === boardItem.id);
+  if (!linkedTasks.length) {
+    const empty = document.createElement("p");
+    empty.className = "properties-linked-empty";
+    empty.textContent = "No linked tasks yet.";
+    propertiesLinkedTaskList.append(empty);
+    return;
+  }
+
+  linkedTasks.forEach((task) => {
+    const row = document.createElement("div");
+    row.className = "properties-linked-task-row";
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.className = "properties-linked-task-open";
+    copy.textContent = task.title || "Untitled task";
+    copy.addEventListener("click", () => openTaskIssueDialog(task.id));
+    const go = document.createElement("button");
+    go.type = "button";
+    go.className = "properties-linked-task-go";
+    go.textContent = "Show link";
+    go.addEventListener("click", () => {
+      openSidePanel("tasks");
+      taskSearch.value = "";
+      renderTasks();
+      showTaskBoardLink(task.id, boardItem.id);
+    });
+    row.append(copy, go);
+    propertiesLinkedTaskList.append(row);
+  });
+}
+
+function updateSelectedBoardName(value) {
+  const project = getActiveProject();
+  const items = getSelectedBoardItems(project).filter((item) => item.type !== "image");
+  const name = cleanUserText(value, 80, "New board");
+  if (!project || !items.length) return;
+  const commands = [];
+  items.forEach((item) => {
+    const before = structuredClone(item);
+    const previousName = getBoardItemName(item, "New board");
+    item.name = name;
+    if (!item.text || item.text === previousName || item.text === "New board") {
+      item.text = name;
+      item.html = escapeHtml(name);
+      const itemNode = boardContent.querySelector(`[data-id="${item.id}"]`);
+      const textNode = itemNode?.querySelector(".item-text");
+      if (textNode && textNode !== document.activeElement) textNode.textContent = name;
+    }
+    commands.push(createHistoryCommand("updateItem", item.id, before, item, { projectId: project.id }));
+  });
+  saveState({
+    historyEntry: createBatchHistoryCommand("renameBoards", commands, {
+      targetId: items.map((item) => item.id).join(","),
+      groupKey: `items:${items.map((item) => item.id).sort().join(",")}:name`
+    })
+  });
+  renderTasks();
 }
 
 function getSelectedBoardItem(project = getActiveProject()) {
@@ -149,6 +272,50 @@ function applyItemColorToNode(item, node) {
     return;
   }
   node.style.background = item.color || ticketColors[0];
+}
+
+function applyItemBorderToNode(item, node) {
+  const color = normalizeHexColor(item.borderColor || "#1d2733", "#1d2733");
+  const thickness = clamp(Number(item.borderThickness ?? (item.type === "shape" ? 2 : 1)), 0, 14);
+  node.style.setProperty("--item-border-color", color);
+  node.style.setProperty("--item-border-thickness", `${thickness}px`);
+  if (item.type === "shape") {
+    const shape = node.querySelector(".shape-visual");
+    if (shape) {
+      shape.style.borderColor = color;
+      shape.style.borderWidth = `${thickness}px`;
+    }
+    return;
+  }
+  node.style.borderColor = color;
+  node.style.borderWidth = `${thickness}px`;
+}
+
+function updateSelectedBoardBorder(style) {
+  const project = getActiveProject();
+  const items = getSelectedBoardItems(project).filter((item) => item.type !== "image");
+  if (!project || !items.length) return;
+  const commands = [];
+  items.forEach((item) => {
+    const before = structuredClone(item);
+    if (style.borderColor) item.borderColor = normalizeHexColor(style.borderColor, "#1d2733");
+    if (Object.prototype.hasOwnProperty.call(style, "borderThickness")) {
+      item.borderThickness = clamp(Number(style.borderThickness) || 0, 0, 14);
+    }
+    const node = boardContent.querySelector(`[data-id="${item.id}"]`);
+    if (node) applyItemBorderToNode(item, node);
+    commands.push(createHistoryCommand("updateItem", item.id, before, item, { projectId: project.id }));
+  });
+  const reference = items[0];
+  propertiesBoardBorderColor.value = normalizeHexColor(reference.borderColor || "#1d2733", "#1d2733");
+  propertiesBoardBorderThickness.value = String(clamp(Number(reference.borderThickness ?? 1), 0, 14));
+  propertiesBoardBorderThicknessLabel.textContent = `${propertiesBoardBorderThickness.value}px`;
+  saveState({
+    historyEntry: createBatchHistoryCommand("updateItemSelection", commands, {
+      targetId: items.map((item) => item.id).join(","),
+      groupKey: `items:${items.map((item) => item.id).sort().join(",")}:border:${Object.keys(style).sort().join(",")}`
+    })
+  });
 }
 
 function getItemTextStyle(item) {
@@ -321,6 +488,10 @@ function updateSelectedConnections(style) {
     const before = structuredClone(connection);
     if (style.color) connection.color = style.color;
     if (style.thickness) connection.thickness = clamp(style.thickness, 1, 14);
+    if (style.borderColor) connection.borderColor = normalizeHexColor(style.borderColor, "#ffffff");
+    if (Object.prototype.hasOwnProperty.call(style, "borderThickness")) {
+      connection.borderThickness = clamp(Number(style.borderThickness) || 0, 0, 10);
+    }
     if (Object.prototype.hasOwnProperty.call(style, "snapToGrid")) {
       connection.snapToGrid = Boolean(style.snapToGrid);
       if (connection.snapToGrid && typeof snapConnectionToGrid === "function") {
@@ -343,6 +514,10 @@ function updateSelectedConnections(style) {
   const thickness = selectedConnection?.thickness || selectedDrawing?.thickness || DEFAULT_CONNECTION_THICKNESS;
   connectionThicknessLabel.textContent = `${thickness}px`;
   propertiesLineThicknessLabel.textContent = `${thickness}px`;
+  if (selectedConnection) {
+    const borderThickness = clamp(Number(selectedConnection.borderThickness ?? 2) || 0, 0, 10);
+    propertiesLineBorderThicknessLabel.textContent = `${borderThickness}px`;
+  }
   connectionsLayer.innerHTML = "";
   renderDrawings(project);
   renderConnections(project);
@@ -442,7 +617,11 @@ function renderProjects() {
     deleteButton.className = "delete-project";
     deleteButton.title = "Delete project";
     deleteButton.textContent = "x";
-    deleteButton.addEventListener("click", () => deleteProject(project.id));
+    deleteButton.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      deleteProject(project.id);
+    });
 
     const renameButton = document.createElement("button");
     renameButton.type = "button";
@@ -521,8 +700,11 @@ function renderWorkspace() {
     node.style.height = `${item.height}px`;
     node.style.background = item.type === "ticket" ? item.color : item.type === "image" ? "#ffffff" : "transparent";
     node.dataset.id = item.id;
+    applyItemBorderToNode(item, node);
     node.classList.toggle("multi-selected", selectedItemIds.has(item.id));
     node.addEventListener("pointerdown", (event) => {
+      if (activeShapeTool) setActiveShapeTool(null);
+      if (drawMode) toggleDrawMode();
       selectedBoardItemId = item.id;
       if (event.target.closest(".resize-handle, .resize-edge")) return;
       if (event.shiftKey) {
@@ -712,6 +894,8 @@ function renderWorkspace() {
       const img = document.createElement("img");
       img.src = item.src;
       img.alt = item.text || "Imported image";
+      img.loading = "lazy";
+      img.decoding = "async";
       img.draggable = false;
       node.append(img);
 
@@ -796,6 +980,24 @@ function renderWorkspace() {
       }
     });
     node.append(text);
+
+    const linkedTasks = (project.tasks || []).filter((task) => task.linkedItemId === item.id);
+    if (linkedTasks.length) {
+      const linkedBadge = document.createElement("button");
+      linkedBadge.type = "button";
+      linkedBadge.className = "board-linked-tasks";
+      linkedBadge.title = "Open linked tasks";
+      linkedBadge.textContent = `${linkedTasks.length} task${linkedTasks.length === 1 ? "" : "s"} linked`;
+      linkedBadge.addEventListener("pointerdown", (event) => event.stopPropagation());
+      linkedBadge.addEventListener("click", (event) => {
+        event.stopPropagation();
+        taskSearch.value = getBoardItemName(item, "");
+        openSidePanel("tasks");
+        renderTasks();
+        showTaskBoardLink(linkedTasks[0].id, item.id);
+      });
+      node.append(linkedBadge);
+    }
 
     node.append(createResizeHandles(node, item, project));
     node.append(createConnectionDots(item));

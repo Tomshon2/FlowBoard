@@ -8,11 +8,13 @@ FlowBoard is a visual collaborative planning tool for small game-development tea
 - Shared workspaces with invite links.
 - Visual boards with cards, shapes, drawings, images, and connections.
 - Kanban-style task columns and task issue details.
+- Task priorities, deadlines, tags, checklists, filters, and board-element links.
 - Project-hour planning by phase and task.
 - Game story sections with nested subdivisions.
 - Team role notes and task assignees.
 - Realtime board updates and live cursors through Supabase.
 - Image upload through Supabase Storage when configured.
+- Project/task export and import through JSON, CSV, PNG, and printable PDF reports.
 
 ## Technologies
 
@@ -70,7 +72,12 @@ Row Level Security is enabled for every public table in the schema.
 
 - Users can only update their own profile.
 - Users can only read and update workspaces where they are owner or member.
-- Workspace membership is restricted to owners and the invite-acceptance function.
+- Workspace roles are `owner`, `admin`, `editor`, `viewer`, and `guest`.
+- Owners control everything.
+- Admins manage members, invites, projects, board data, and tasks.
+- Editors can edit board data, tasks, images, and project content.
+- Viewers and guests can read workspace data but cannot update board state through RLS.
+- Workspace membership is restricted to owners/admins and the invite-acceptance function.
 - Invite links expire and are tied to a workspace.
 - Storage objects are scoped by workspace folder.
 - Editable board HTML is sanitized before saving.

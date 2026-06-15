@@ -33,6 +33,123 @@ function saveStoryChange(project, beforeStory, groupKey = `project:${project.id}
   });
 }
 
+function saveGddFields() {
+  const project = getActiveProject();
+  if (!project) return;
+  const before = { gdd: structuredClone(project.gdd || {}) };
+  project.gdd = {
+    concept: String(gddConcept.value || "").slice(0, 3000),
+    genre: cleanUserText(gddGenre.value, 120, ""),
+    characters: readGddCharacters(),
+    mechanics: String(gddMechanics.value || "").slice(0, 3000)
+  };
+  saveState({
+    historyEntry: createHistoryCommand("updateProject", project.id, before, {
+      gdd: structuredClone(project.gdd)
+    }, { projectId: project.id, groupKey: `project:${project.id}:gdd` })
+  });
+}
+
+function normalizeGddCharacters(gdd = {}) {
+  if (Array.isArray(gdd.characters)) {
+    return gdd.characters.map((character) => ({
+      id: character.id || crypto.randomUUID(),
+      name: cleanUserText(character.name, 100, "Character"),
+      description: String(character.description || "").slice(0, 1200)
+    }));
+  }
+  const legacyText = String(gdd.characters || "").trim();
+  return legacyText
+    ? [{ id: crypto.randomUUID(), name: "Character", description: legacyText.slice(0, 1200) }]
+    : [];
+}
+
+function readGddCharacters() {
+  return Array.from(gddCharacterList.querySelectorAll(".gdd-character-card")).map((card) => ({
+    id: card.dataset.characterId || crypto.randomUUID(),
+    name: cleanUserText(card.querySelector(".gdd-character-name")?.value, 100, "Character"),
+    description: String(card.querySelector(".gdd-character-description")?.value || "").slice(0, 1200)
+  })).filter((character) => character.name || character.description);
+}
+
+function addGddCharacter(character = {}) {
+  const project = getActiveProject();
+  if (!project) return;
+  project.gdd ??= {};
+  const before = { gdd: structuredClone(project.gdd) };
+  const characters = normalizeGddCharacters(project.gdd);
+  characters.push({
+    id: crypto.randomUUID(),
+    name: cleanUserText(character.name, 100, "New character"),
+    description: String(character.description || "").slice(0, 1200)
+  });
+  project.gdd.characters = characters;
+  saveState({
+    historyEntry: createHistoryCommand("updateProject", project.id, before, {
+      gdd: structuredClone(project.gdd)
+    }, { projectId: project.id, groupKey: `project:${project.id}:gdd:characters` })
+  });
+  renderStory();
+}
+
+function updateGddCharacter(characterId, patch) {
+  const project = getActiveProject();
+  if (!project) return;
+  project.gdd ??= {};
+  const characters = normalizeGddCharacters(project.gdd);
+  const character = characters.find((candidate) => candidate.id === characterId);
+  if (!character) return;
+  const before = { gdd: structuredClone(project.gdd) };
+  if (Object.prototype.hasOwnProperty.call(patch, "name")) character.name = cleanUserText(patch.name, 100, "Character");
+  if (Object.prototype.hasOwnProperty.call(patch, "description")) character.description = String(patch.description || "").slice(0, 1200);
+  project.gdd.characters = characters;
+  saveState({
+    historyEntry: createHistoryCommand("updateProject", project.id, before, {
+      gdd: structuredClone(project.gdd)
+    }, { projectId: project.id, groupKey: `project:${project.id}:gdd:characters:${characterId}` })
+  });
+}
+
+async function deleteGddCharacter(characterId) {
+  const project = getActiveProject();
+  if (!project) return;
+  if (!await confirmDangerousAction("Delete this character?")) return;
+  project.gdd ??= {};
+  const before = { gdd: structuredClone(project.gdd) };
+  project.gdd.characters = normalizeGddCharacters(project.gdd).filter((character) => character.id !== characterId);
+  saveState({
+    historyEntry: createHistoryCommand("updateProject", project.id, before, {
+      gdd: structuredClone(project.gdd)
+    }, { projectId: project.id, groupKey: `project:${project.id}:gdd:characters` })
+  });
+  renderStory();
+}
+
+function renderGddCharacters(characters) {
+  gddCharacterList.innerHTML = "";
+  if (!characters.length) {
+    const empty = document.createElement("p");
+    empty.className = "gdd-empty";
+    empty.textContent = "No characters yet.";
+    gddCharacterList.append(empty);
+    return;
+  }
+  characters.forEach((character) => {
+    const card = document.createElement("article");
+    card.className = "gdd-character-card";
+    card.dataset.characterId = character.id;
+    card.innerHTML = `
+      <input class="gdd-character-name" type="text" maxlength="100" value="${escapeHtml(character.name)}" placeholder="Character name" />
+      <button class="gdd-character-delete" type="button" title="Remove character">x</button>
+      <textarea class="gdd-character-description" rows="3" placeholder="Description">${escapeHtml(character.description || "")}</textarea>
+    `;
+    card.querySelector(".gdd-character-name").addEventListener("change", (event) => updateGddCharacter(character.id, { name: event.target.value }));
+    card.querySelector(".gdd-character-description").addEventListener("change", (event) => updateGddCharacter(character.id, { description: event.target.value }));
+    card.querySelector(".gdd-character-delete").addEventListener("click", () => deleteGddCharacter(character.id));
+    gddCharacterList.append(card);
+  });
+}
+
 function addStoryNode(parentId, rawTitle) {
   const project = getActiveProject();
   if (!project) return;
@@ -86,6 +203,12 @@ function renderStory() {
   const nodes = project?.story || [];
   storyCount.textContent = String(countStoryNodes(nodes));
   if (!project) return;
+  project.gdd ??= {};
+  project.gdd.characters = normalizeGddCharacters(project.gdd);
+  gddConcept.value = project.gdd.concept || "";
+  gddGenre.value = project.gdd.genre || "";
+  gddMechanics.value = project.gdd.mechanics || "";
+  renderGddCharacters(project.gdd.characters);
   if (!nodes.length) {
     const empty = document.createElement("p");
     empty.className = "empty-panel-copy";
@@ -247,6 +370,87 @@ function renderTeamRoles() {
 
     row.append(head, notes);
     teamRoleList.append(row);
+  });
+}
+
+function getOnlineUserIds() {
+  const onlineIds = new Set();
+  if (currentUser?.id) onlineIds.add(currentUser.id);
+  remoteCursors.forEach((cursor) => {
+    if (Date.now() - cursor.seenAt <= 9000 && cursor.userId) onlineIds.add(cursor.userId);
+  });
+  return onlineIds;
+}
+
+function renderWorkspaceMembers() {
+  if (!workspaceMembersList || !workspaceRoleBadge) return;
+  workspaceMembersList.innerHTML = "";
+  workspaceRoleBadge.textContent = currentWorkspaceRole || "guest";
+  workspaceRoleBadge.className = `workspace-role-badge role-${currentWorkspaceRole || "guest"}`;
+
+  const canManage = canManageWorkspaceMembers();
+  workspaceMembersHelp.textContent = canManage
+    ? "You can change roles and remove members."
+    : "Only owner/admin can manage workspace members.";
+
+  if (!currentWorkspaceId) {
+    const empty = document.createElement("p");
+    empty.className = "empty-panel-copy";
+    empty.textContent = "Sign in to Supabase to see workspace members.";
+    workspaceMembersList.append(empty);
+    return;
+  }
+
+  if (!workspaceMembers.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty-panel-copy";
+    empty.textContent = "Members will appear here after the workspace loads.";
+    workspaceMembersList.append(empty);
+    return;
+  }
+
+  const onlineIds = getOnlineUserIds();
+  workspaceMembers.forEach((member) => {
+    const row = document.createElement("article");
+    row.className = "workspace-member-row";
+    const isOnline = onlineIds.has(member.userId);
+    const isSelf = member.userId === currentUser?.id;
+    const isOwner = member.role === "owner";
+    const canEditThisMember = canManage && !isOwner && !isSelf;
+
+    const identity = document.createElement("div");
+    identity.className = "workspace-member-identity";
+    identity.innerHTML = `
+      <span class="presence-dot ${isOnline ? "online" : ""}" aria-hidden="true"></span>
+      <div>
+        <strong>${escapeHtml(member.displayName || "Team member")}${isSelf ? " (you)" : ""}</strong>
+        <small>${isOnline ? "Online" : "Offline"}</small>
+      </div>
+    `;
+
+    const roleSelect = document.createElement("select");
+    roleSelect.className = "workspace-member-role";
+    ["owner", "admin", "editor", "viewer", "guest"].forEach((role) => {
+      const option = document.createElement("option");
+      option.value = role;
+      option.textContent = role[0].toUpperCase() + role.slice(1);
+      option.disabled = role === "owner" && member.role !== "owner";
+      roleSelect.append(option);
+    });
+    roleSelect.value = member.role;
+    roleSelect.disabled = !canEditThisMember;
+    roleSelect.addEventListener("change", () => updateWorkspaceMemberRole(member.userId, roleSelect.value));
+
+    const removeButton = document.createElement("button");
+    removeButton.type = "button";
+    removeButton.className = "small delete-task workspace-member-remove";
+    removeButton.textContent = "x";
+    removeButton.title = "Remove member";
+    removeButton.disabled = !canEditThisMember;
+    removeButton.addEventListener("click", () => removeWorkspaceMember(member.userId));
+
+    row.append(identity, roleSelect, removeButton);
+    workspaceMembersList.append(row);
   });
 }
 

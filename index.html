@@ -71,6 +71,16 @@
             <svg viewBox="0 0 24 24"><path d="M16 19v-1.5A3.5 3.5 0 0 0 12.5 14h-5A3.5 3.5 0 0 0 4 17.5V19"/><circle cx="10" cy="7" r="3"/><path d="M20 19v-1a3 3 0 0 0-2.2-2.9"/><path d="M17 4.3a3 3 0 0 1 0 5.4"/></svg>
           </span>
         </button>
+        <button id="milestones-drawer-toggle" class="drawer-toggle drawer-toggle-right" type="button" aria-expanded="false" aria-controls="side-drawer" title="Milestones">
+          <span class="toggle-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M5 4v16"/><path d="M5 5h12l-2 4 2 4H5"/><path d="M9 17h8"/></svg>
+          </span>
+        </button>
+        <button id="history-drawer-toggle" class="drawer-toggle drawer-toggle-right" type="button" aria-expanded="false" aria-controls="side-drawer" title="Project history">
+          <span class="toggle-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></svg>
+          </span>
+        </button>
       </div>
       <aside id="projects-drawer" class="projects-panel drawer drawer-left">
         <div id="workspace-drawer-resize" class="drawer-resize-handle" role="separator" aria-orientation="vertical" aria-label="Resize workspace panel"></div>
@@ -113,8 +123,25 @@
 
         <section id="board-properties" class="property-section">
           <label>
+            Name
+            <input id="properties-board-name" type="text" maxlength="80" placeholder="Board name" />
+          </label>
+          <label>
             Fill color
             <input id="properties-board-color" type="color" value="#fff1b8" />
+          </label>
+          <label>
+            Border color
+            <input id="properties-board-border-color" type="color" value="#1d2733" />
+          </label>
+          <label>
+            Border thickness
+            <input id="properties-board-border-thickness" type="range" min="0" max="14" step="1" value="1" />
+          </label>
+          <span id="properties-board-border-thickness-label">1px</span>
+          <label id="properties-board-snap-row" class="toggle-row">
+            <input id="properties-board-snap-grid" type="checkbox" />
+            Snap to grid
           </label>
           <label>
             HEX
@@ -150,6 +177,10 @@
             <button id="properties-italic" type="button">I</button>
             <button id="properties-underline" type="button">U</button>
           </div>
+          <div id="properties-linked-tasks" class="properties-linked-tasks hidden">
+            <div class="properties-subheading">Linked tasks</div>
+            <div id="properties-linked-task-list" class="properties-linked-task-list"></div>
+          </div>
         </section>
 
         <section id="line-properties" class="property-section hidden">
@@ -157,11 +188,20 @@
             Color
             <input id="properties-line-color" type="color" value="#172033" />
           </label>
+          <label id="properties-line-border-color-row">
+            Border color
+            <input id="properties-line-border-color" type="color" value="#ffffff" />
+          </label>
           <label>
             Thickness
             <input id="properties-line-thickness" type="range" min="1" max="24" step="1" value="3" />
           </label>
           <span id="properties-line-thickness-label">3px</span>
+          <label id="properties-line-border-thickness-row">
+            Border thickness
+            <input id="properties-line-border-thickness" type="range" min="0" max="10" step="1" value="2" />
+          </label>
+          <span id="properties-line-border-thickness-label">2px</span>
           <label id="properties-line-snap-row" class="toggle-row">
             <input id="properties-line-snap-grid" type="checkbox" />
             Snap to grid
@@ -279,11 +319,76 @@
             <span id="task-count" class="counter">0/0</span>
           </div>
           <div id="tasks-content" class="panel-content">
+            <div class="kanban-filter-bar" aria-label="Task filters">
+              <input id="task-search" type="search" placeholder="Search tasks" />
+              <select id="task-filter-person" aria-label="Filter by person">
+                <option value="">All people</option>
+              </select>
+              <select id="task-filter-status" aria-label="Filter by status">
+                <option value="">All status</option>
+              </select>
+              <select id="task-filter-priority" aria-label="Filter by priority">
+                <option value="">All priorities</option>
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="critical">Critical</option>
+              </select>
+            </div>
+            <div class="kanban-actions-tab">
+              <button id="data-actions-toggle" class="kanban-actions-toggle" type="button" aria-expanded="false" aria-controls="kanban-data-actions">Export / Import</button>
+              <div id="kanban-data-actions" class="kanban-data-actions hidden" aria-label="Task and project data actions">
+                <button id="export-board-png-btn" type="button">Board PNG</button>
+                <button id="export-board-pdf-btn" type="button">Board PDF</button>
+                <button id="export-project-json-btn" type="button">Project + Tasks JSON</button>
+                <button id="export-project-report-btn" type="button">Project report</button>
+                <button id="export-gdd-pdf-btn" type="button">GDD PDF</button>
+                <label class="import-chip">
+                  Import JSON
+                  <input id="import-project-json-input" type="file" accept="application/json,.json" />
+                </label>
+                <label class="import-chip">
+                  Import CSV
+                  <input id="import-tasks-csv-input" type="file" accept=".csv,text/csv" />
+                </label>
+              </div>
+            </div>
             <form id="task-form" class="compact-form kanban-status-form">
               <input id="task-title" type="text" placeholder="Add status" />
               <button type="submit">+ Status</button>
             </form>
             <div id="tasks-list" class="tasks-list"></div>
+          </div>
+        </section>
+
+        <section id="milestones-panel" class="milestones-panel collapsible-panel">
+          <div class="section-title">
+            <button id="toggle-milestones" class="collapse-button panel-internal-toggle" type="button" aria-expanded="true" aria-controls="milestones-content">v</button>
+            <div class="section-copy">
+              <h2>Milestones</h2>
+            </div>
+            <span id="milestone-count" class="counter">0</span>
+          </div>
+          <div id="milestones-content" class="panel-content">
+            <form id="milestone-form" class="compact-form milestone-form">
+              <input id="milestone-name" type="text" placeholder="Milestone name" />
+              <input id="milestone-deadline" type="date" />
+              <button type="submit">Add</button>
+            </form>
+            <div id="milestone-list" class="milestone-list"></div>
+          </div>
+        </section>
+
+        <section id="history-panel" class="history-panel collapsible-panel">
+          <div class="section-title">
+            <button id="toggle-history" class="collapse-button panel-internal-toggle" type="button" aria-expanded="true" aria-controls="history-content">v</button>
+            <div class="section-copy">
+              <h2>History</h2>
+            </div>
+            <span id="history-count" class="counter">0</span>
+          </div>
+          <div id="history-content" class="panel-content">
+            <div id="project-history-list" class="project-history-list"></div>
           </div>
         </section>
 
@@ -296,6 +401,25 @@
             <span id="story-count" class="counter">0</span>
           </div>
           <div id="story-content" class="panel-content">
+            <section class="gdd-fields">
+              <label>
+                Concept
+                <textarea id="gdd-concept" rows="3" placeholder="Define the core concept."></textarea>
+              </label>
+              <label>
+                Genre
+                <input id="gdd-genre" type="text" placeholder="Define genre" />
+              </label>
+              <label>
+                Characters
+                <div id="gdd-character-list" class="gdd-character-list"></div>
+                <button id="gdd-add-character" class="gdd-add-character" type="button">+ Character</button>
+              </label>
+              <label>
+                Mechanics
+                <textarea id="gdd-mechanics" rows="3" placeholder="Movement, combat, progression, economy..."></textarea>
+              </label>
+            </section>
             <form id="story-root-form" class="compact-form">
               <input id="story-root-title" type="text" placeholder="New story division" />
               <button type="submit">+</button>
@@ -313,6 +437,16 @@
             <span id="team-count" class="counter">0</span>
           </div>
           <div id="team-content" class="panel-content">
+            <section class="workspace-members-card">
+              <div class="workspace-members-head">
+                <div>
+                  <h3>Workspace members</h3>
+                  <p id="workspace-members-help" class="muted">Roles control who can view, edit, or manage this workspace.</p>
+                </div>
+                <span id="workspace-role-badge" class="workspace-role-badge">guest</span>
+              </div>
+              <div id="workspace-members-list" class="workspace-members-list"></div>
+            </section>
             <form id="team-role-form" class="team-role-form">
               <input id="team-member-name" type="text" placeholder="Name" />
               <input id="team-member-role" type="text" placeholder="Role" />
@@ -335,6 +469,8 @@
         "js/board-tools.js",
         "js/tasks-hours.js",
         "js/story-team.js",
+        "js/milestones-history.js",
+        "js/export-import.js",
         "js/items-interactions.js",
         "js/selection-projects.js",
         "js/text-utils.js",

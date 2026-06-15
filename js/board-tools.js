@@ -75,8 +75,11 @@ function createItemFromPlacement(tool, bounds) {
     width,
     height,
     color: getCreationColor(),
+    name: "New board",
     text: "New board",
-    html: "New board"
+    html: "New board",
+    borderColor: "#1d2733",
+    borderThickness: 2
   }, { forceHistoryStep: true });
 }
 
@@ -347,8 +350,20 @@ function renderConnections(project) {
     const selectedConnection = selectedConnectionIds.has(connection.id);
     const connectionColorValue = connection.color || DEFAULT_CONNECTION_COLOR;
     const connectionThicknessValue = Number(connection.thickness) || DEFAULT_CONNECTION_THICKNESS;
+    const borderThickness = clamp(Number(connection.borderThickness ?? 2) || 0, 0, 10);
+    const borderColor = normalizeHexColor(connection.borderColor || "#ffffff", "#ffffff");
     const markerId = ensureArrowMarker(`arrow-head-${connection.id}`, connectionColorValue);
     const route = getConnectionRoute(connection, from, to, project);
+    if (borderThickness > 0) {
+      const borderPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      borderPath.setAttribute("d", route.path);
+      borderPath.setAttribute("class", "connection-border");
+      borderPath.dataset.id = connection.id;
+      borderPath.style.stroke = borderColor;
+      borderPath.style.strokeWidth = String(connectionThicknessValue + borderThickness * 2);
+      borderPath.addEventListener("click", (event) => handleConnectionSelection(event, connection.id));
+      connectionsLayer.append(borderPath);
+    }
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
     path.setAttribute("d", route.path);
     path.setAttribute("class", `connection-line ${selectedConnection ? "selected-connection" : ""}`);
@@ -437,6 +452,8 @@ function updateRenderedConnection(project, connection) {
   if (!from || !to) return;
 
   const route = getConnectionRoute(connection, from, to, project);
+  const borderLine = findConnectionSvgNode(".connection-border", connection.id);
+  if (borderLine) borderLine.setAttribute("d", route.path);
   const line = findConnectionSvgNode(".connection-line", connection.id);
   if (line) line.setAttribute("d", route.path);
   setConnectionCirclePosition(findConnectionSvgNode(".from-endpoint", connection.id), route.start);
