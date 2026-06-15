@@ -372,7 +372,7 @@ function renderConnections(project) {
     toHandle.addEventListener("pointerdown", (event) => startConnectionEndpointDrag(event, project, connection, to, "toSide"));
     connectionsLayer.append(toHandle);
 
-    renderConnectionBendHandle(project, connection, route, selectedConnection, connectionColorValue);
+    renderConnectionEditHandles(project, connection, route, selectedConnection, connectionColorValue);
   });
 }
 
@@ -385,22 +385,44 @@ function createConnectionEndpoint(x, y, className) {
   return handle;
 }
 
-function renderConnectionBendHandle(project, connection, route, selectedConnection, color) {
+function renderConnectionEditHandles(project, connection, route, selectedConnection, color) {
   if (!selectedConnection) return;
-  const point = route.bendHandle || getRouteMidpoint(route.points);
-  const handle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-  handle.setAttribute("cx", String(point.x));
-  handle.setAttribute("cy", String(point.y));
-  handle.setAttribute("r", "10");
-  handle.setAttribute("class", "connection-handle selected-connection-control");
-  handle.dataset.id = connection.id;
-  handle.style.stroke = color;
-  handle.addEventListener("pointerdown", (event) => startConnectionBendDrag(event, project, connection));
-  connectionsLayer.append(handle);
+  route.manualPoints.forEach((point, index) => {
+    const handle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    handle.setAttribute("cx", String(point.x));
+    handle.setAttribute("cy", String(point.y));
+    handle.setAttribute("r", "8");
+    handle.setAttribute("class", "connection-handle connection-waypoint selected-connection-control");
+    handle.dataset.id = connection.id;
+    handle.dataset.connectionControl = "waypoint";
+    handle.dataset.index = String(index);
+    handle.style.stroke = color;
+    handle.addEventListener("pointerdown", (event) => startConnectionPointDrag(event, project, connection, route, index));
+    handle.addEventListener("contextmenu", (event) => removeConnectionPoint(event, project, connection, route, index));
+    connectionsLayer.append(handle);
+  });
+
+  route.insertSegments.forEach((segment) => {
+    const handle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    handle.setAttribute("cx", String(segment.x));
+    handle.setAttribute("cy", String(segment.y));
+    handle.setAttribute("r", "5");
+    handle.setAttribute("class", "connection-handle connection-insert selected-connection-control");
+    handle.dataset.id = connection.id;
+    handle.dataset.connectionControl = "insert";
+    handle.dataset.index = String(segment.insertIndex);
+    handle.style.stroke = color;
+    handle.addEventListener("pointerdown", (event) => startConnectionPointDrag(event, project, connection, route, segment.insertIndex, segment.point));
+    connectionsLayer.append(handle);
+  });
 }
 
 function findConnectionSvgNode(selector, id) {
   return [...connectionsLayer.querySelectorAll(selector)].find((node) => node.dataset.id === id) || null;
+}
+
+function findConnectionSvgNodes(selector, id) {
+  return [...connectionsLayer.querySelectorAll(selector)].filter((node) => node.dataset.id === id);
 }
 
 function setConnectionCirclePosition(node, point) {
@@ -419,29 +441,31 @@ function updateRenderedConnection(project, connection) {
   if (line) line.setAttribute("d", route.path);
   setConnectionCirclePosition(findConnectionSvgNode(".from-endpoint", connection.id), route.start);
   setConnectionCirclePosition(findConnectionSvgNode(".to-endpoint", connection.id), route.end);
-  setConnectionCirclePosition(findConnectionSvgNode(".connection-handle", connection.id), route.bendHandle || getRouteMidpoint(route.points));
+  findConnectionSvgNodes(".connection-waypoint", connection.id).forEach((node) => {
+    setConnectionCirclePosition(node, route.manualPoints[Number(node.dataset.index)]);
+  });
+  findConnectionSvgNodes(".connection-insert", connection.id).forEach((node) => {
+    setConnectionCirclePosition(node, route.insertSegments[Number(node.dataset.index)]);
+  });
 }
 
-function beginConnectionPointerCapture(event, finishDrag) {
+function beginConnectionPointerCapture(event) {
   const target = event.currentTarget;
   const pointerId = event.pointerId;
-  const onLostCapture = (lostEvent) => finishDrag(lostEvent);
 
   if (pointerId !== undefined) {
     try {
       target?.setPointerCapture?.(pointerId);
-      target?.addEventListener?.("lostpointercapture", onLostCapture);
     } catch {
       // Global listeners below still keep the drag alive in browsers that refuse SVG capture.
     }
   }
 
-  return { target, pointerId, onLostCapture };
+  return { target, pointerId };
 }
 
 function endConnectionPointerCapture(capture) {
   if (!capture?.target || capture.pointerId === undefined) return;
-  capture.target.removeEventListener?.("lostpointercapture", capture.onLostCapture);
   try {
     if (capture.target.hasPointerCapture?.(capture.pointerId)) {
       capture.target.releasePointerCapture(capture.pointerId);
@@ -500,14 +524,21 @@ function getConnectionRoute(connection, from, to, project) {
   const obstacles = isSelfConnection
     ? (project?.items || []).map((item) => getItemBounds(item, 28))
     : getConnectionObstacles(project, connection);
-  const route = isSelfConnection
-    ? getSelfConnectionRoutePoints(from, connection.fromSide, connection.toSide, startStub, endStub, obstacles)
-    : getBendRoutePoints(connection, from, to, startStub, endStub);
+  const manualPoints = getConnectionManualPoints(connection);
+  const hasManualRoute = connection.manualBend && Array.isArray(connection.manualPoints);
+  const route = hasManualRoute
+    ? { points: [startStub, ...manualPoints, endStub], bendHandle: getRouteMidpoint([startStub, ...manualPoints, endStub]) }
+    : isSelfConnection
+      ? getSelfConnectionRoutePoints(from, connection.fromSide, connection.toSide, startStub, endStub, obstacles)
+      : getBendRoutePoints(connection, from, to, startStub, endStub);
   const points = simplifyRoutePoints([start, ...route.points, end]);
+  const editablePoints = points.slice(2, -2);
 
   return {
     path: pointsToPath(points),
     points,
+    manualPoints: editablePoints,
+    insertSegments: getConnectionInsertSegments(points),
     bendHandle: route.bendHandle || getRouteMidpoint(points),
     start,
     end
@@ -526,6 +557,40 @@ function getRouteMidpoint(points = []) {
   };
 }
 
+function snapConnectionValueToGrid(value, max) {
+  const gridSize = typeof BOARD_GRID_SIZE === "number" && Number.isFinite(BOARD_GRID_SIZE) && BOARD_GRID_SIZE > 0 ? BOARD_GRID_SIZE : 28;
+  return Math.round(clamp(Math.round(value / gridSize) * gridSize, 0, max));
+}
+
+function snapConnectionPointToGrid(point) {
+  return {
+    x: snapConnectionValueToGrid(Number(point?.x) || 0, 6400),
+    y: snapConnectionValueToGrid(Number(point?.y) || 0, 4200)
+  };
+}
+
+function normalizeConnectionPoint(point, snapToGrid = false) {
+  const normalized = {
+    x: Math.round(clamp(Number(point?.x) || 0, 0, 6400)),
+    y: Math.round(clamp(Number(point?.y) || 0, 0, 4200))
+  };
+  return snapToGrid ? snapConnectionPointToGrid(normalized) : normalized;
+}
+
+function snapConnectionToGrid(connection, project = getActiveProject()) {
+  if (!connection) return;
+  connection.snapToGrid = true;
+  connection.manualPoints = getConnectionManualPoints(connection);
+  const max = connection.bendAxis === "y" ? 4200 : 6400;
+  if (Number.isFinite(Number(connection.bend))) {
+    connection.bend = snapConnectionValueToGrid(Number(connection.bend), max);
+  } else if (project) {
+    const from = project.items?.find((item) => item.id === connection.from);
+    const to = project.items?.find((item) => item.id === connection.to);
+    if (from && to) connection.bend = snapConnectionValueToGrid(getDefaultConnectionBend(connection, project), max);
+  }
+}
+
 function getBendRoutePoints(connection, from, to, startStub, endStub) {
   if (!["x", "y"].includes(connection.bendAxis)) {
     connection.bendAxis = ["left", "right"].includes(connection.fromSide) ? "x" : "y";
@@ -534,7 +599,10 @@ function getBendRoutePoints(connection, from, to, startStub, endStub) {
   if (!Number.isFinite(Number(connection.bend))) {
     connection.bend = getDefaultConnectionBend(connection, { items: [from, to] });
   }
-  const bend = Math.round(clamp(Number(connection.bend), 0, max));
+  const bend = connection.snapToGrid
+    ? snapConnectionValueToGrid(Number(connection.bend), max)
+    : Math.round(clamp(Number(connection.bend), 0, max));
+  if (connection.snapToGrid) connection.bend = bend;
   const points = connection.bendAxis === "x"
     ? [startStub, { x: bend, y: startStub.y }, { x: bend, y: endStub.y }, endStub]
     : [startStub, { x: startStub.x, y: bend }, { x: endStub.x, y: bend }, endStub];
@@ -571,6 +639,14 @@ function getSafeConnectionBend(axis, desired, from, to, startStub, endStub) {
       score: getConnectionCollisionScore(axis, candidate, startStub, endStub, bounds) + Math.abs(candidate - desired)
     }))
     .sort((a, b) => a.score - b.score)[0]?.value ?? Math.round(desired);
+}
+
+function getConnectionManualPoints(connection) {
+  return Array.isArray(connection.manualPoints)
+    ? connection.manualPoints
+      .filter((point) => Number.isFinite(point?.x) && Number.isFinite(point?.y))
+      .map((point) => normalizeConnectionPoint(point, connection.snapToGrid === true))
+    : [];
 }
 
 function getConnectionObstacles(project, connection) {
@@ -690,6 +766,24 @@ function pointsToPath(points) {
   return points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
 }
 
+function getConnectionInsertSegments(points) {
+  const segments = [];
+  for (let index = 1; index < points.length - 2; index += 1) {
+    const a = points[index];
+    const b = points[index + 1];
+    const point = {
+      x: Math.round((a.x + b.x) / 2),
+      y: Math.round((a.y + b.y) / 2)
+    };
+    segments.push({
+      ...point,
+      insertIndex: Math.max(0, index - 1),
+      point
+    });
+  }
+  return segments;
+}
+
 function getConnectionCollisionScore(axis, bend, startStub, endStub, bounds) {
   const points = axis === "x"
     ? [startStub, { x: bend, y: startStub.y }, { x: bend, y: endStub.y }, endStub]
@@ -786,6 +880,7 @@ function cycleConnectionSide(connection, key) {
   connection[key] = sides[(currentIndex + 1) % sides.length];
   connection.bendAxis = ["left", "right"].includes(connection.fromSide) ? "x" : "y";
   connection.bend = undefined;
+  connection.manualPoints = [];
   saveState({
     historyEntry: createHistoryCommand("updateConnection", connection.id, before, connection, {
       projectId: project?.id || state.activeProjectId
@@ -819,6 +914,8 @@ function getDefaultConnectionBend(connection, project) {
 }
 
 function startConnectionEndpointDrag(event, project, connection, item, key) {
+  if (typeof startConnectionSelectionDrag === "function" && startConnectionSelectionDrag(event, project, connection.id)) return;
+  if (event.button !== 0) return;
   event.preventDefault();
   event.stopPropagation();
   event.stopImmediatePropagation();
@@ -841,6 +938,7 @@ function startConnectionEndpointDrag(event, project, connection, item, key) {
     if (nextSide === connection[key]) return;
     connection[key] = nextSide;
     connection.manualBend = false;
+    connection.manualPoints = [];
     connection.bend = getDefaultConnectionBend(connection, project);
     updateRenderedConnection(project, connection);
   };
@@ -877,6 +975,96 @@ function startConnectionEndpointDrag(event, project, connection, item, key) {
   window.addEventListener("blur", end);
 }
 
+function startConnectionPointDrag(event, project, connection, route, pointIndex, insertedPoint = null) {
+  if (typeof startConnectionSelectionDrag === "function" && startConnectionSelectionDrag(event, project, connection.id)) return;
+  if (event.button !== 0) return;
+  event.preventDefault();
+  event.stopPropagation();
+  event.stopImmediatePropagation();
+  interactionLock = true;
+  board.classList.add("dragging-connection");
+  clearNearbyConnectionDots();
+  selectedConnectionIds = new Set([connection.id]);
+  selectedItemIds.clear();
+  selectedDrawingIds.clear();
+  selectedBoardItemId = null;
+  renderConnectionStylePanel();
+  const beforeConnection = structuredClone(connection);
+  connection.manualPoints = route.manualPoints.map((point) => normalizeConnectionPoint(point, connection.snapToGrid === true));
+  if (insertedPoint) {
+    connection.manualPoints.splice(pointIndex, 0, normalizeConnectionPoint(insertedPoint, connection.snapToGrid === true));
+    event.currentTarget?.setAttribute("r", "8");
+    event.currentTarget?.classList.remove("connection-insert");
+    event.currentTarget?.classList.add("connection-waypoint");
+    event.currentTarget.dataset.connectionControl = "waypoint";
+    event.currentTarget.dataset.index = String(pointIndex);
+  }
+  let dragEnded = false;
+
+  const move = (moveEvent) => {
+    if (!isSameConnectionPointer(moveEvent, pointerCapture.pointerId)) return;
+    moveEvent.preventDefault();
+    const point = getBoardPoint(moveEvent);
+    const nextPoint = normalizeConnectionPoint(point, connection.snapToGrid === true);
+    connection.manualPoints[pointIndex] = nextPoint;
+    connection.manualBend = true;
+    setConnectionCirclePosition(event.currentTarget, nextPoint);
+    updateRenderedConnection(project, connection);
+  };
+
+  const end = (endEvent = {}) => {
+    if (!isSameConnectionPointer(endEvent, pointerCapture.pointerId)) return;
+    if (dragEnded) return;
+    dragEnded = true;
+    const cancelled = endEvent.type === "pointercancel" || endEvent.type === "blur";
+    if (cancelled) Object.assign(connection, structuredClone(beforeConnection));
+    endConnectionPointerCapture(pointerCapture);
+    interactionLock = false;
+    board.classList.remove("dragging-connection");
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", end);
+    window.removeEventListener("pointercancel", end);
+    window.removeEventListener("blur", end);
+    connectionsLayer.innerHTML = "";
+    renderConnections(project);
+    if (!cancelled) {
+      commitState({
+        historyEntry: createHistoryCommand("updateConnection", connection.id, beforeConnection, connection, {
+          projectId: project.id
+        }),
+        forceStep: true
+      });
+    }
+  };
+
+  const pointerCapture = beginConnectionPointerCapture(event);
+  move(event);
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", end);
+  window.addEventListener("pointercancel", end);
+  window.addEventListener("blur", end);
+}
+
+function removeConnectionPoint(event, project, connection, route, pointIndex) {
+  event.preventDefault();
+  event.stopPropagation();
+  event.stopImmediatePropagation();
+  const beforeConnection = structuredClone(connection);
+  const points = route.manualPoints.map((point) => ({ ...point }));
+  if (pointIndex < 0 || pointIndex >= points.length) return;
+  points.splice(pointIndex, 1);
+  connection.manualPoints = points;
+  connection.manualBend = true;
+  connectionsLayer.innerHTML = "";
+  renderConnections(project);
+  commitState({
+    historyEntry: createHistoryCommand("updateConnection", connection.id, beforeConnection, connection, {
+      projectId: project.id
+    }),
+    forceStep: true
+  });
+}
+
 function getClosestSide(item, point, preferredSide = "") {
   const width = item.width || 210;
   const height = item.height || 140;
@@ -895,6 +1083,8 @@ function getClosestSide(item, point, preferredSide = "") {
 }
 
 function startConnectionBendDrag(event, project, connection) {
+  if (typeof startConnectionSelectionDrag === "function" && startConnectionSelectionDrag(event, project, connection.id)) return;
+  if (event.button !== 0) return;
   event.preventDefault();
   event.stopPropagation();
   event.stopImmediatePropagation();

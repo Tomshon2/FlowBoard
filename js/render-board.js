@@ -1,5 +1,5 @@
 ﻿function render() {
-  renderBoardTheme();
+  renderBoardSurface();
   renderProjects();
   renderWorkspace();
   renderRemoteCursors();
@@ -12,9 +12,21 @@
   syncDrawerButtons();
 }
 
+function renderBoardSurface() {
+  personalTheme = loadPersonalTheme();
+  board.classList.toggle("board-dark", personalTheme === "dark");
+  app.classList.toggle("app-dark", personalTheme === "dark");
+  board.classList.toggle("grid-hidden", state.boardGrid === "hidden");
+  const gridHidden = state.boardGrid === "hidden";
+  boardGridBtn.classList.toggle("active", gridHidden);
+  boardGridBtn.title = gridHidden ? "Show grid" : "Hide grid";
+  boardGridBtn.setAttribute("aria-label", gridHidden ? "Show grid" : "Hide grid");
+  boardGridBtn.setAttribute("aria-pressed", String(gridHidden));
+  boardThemeBtn.textContent = personalTheme === "dark" ? "Light mode" : "Dark mode";
+}
+
 function renderBoardTheme() {
-  board.classList.toggle("board-dark", state.boardTheme === "dark");
-  boardThemeBtn.textContent = state.boardTheme === "dark" ? "Light background" : "Dark background";
+  renderBoardSurface();
 }
 
 function renderConnectionStylePanel() {
@@ -25,27 +37,39 @@ function renderConnectionStylePanel() {
 function renderPropertiesPanel() {
   const project = getActiveProject();
   const selectedBoard = getSelectedBoardItem(project);
+  const selectedBoards = getSelectedBoardItems(project);
   const selectedConnection = project?.connections.find((connection) => selectedConnectionIds.has(connection.id));
   const selectedDrawing = project?.drawings?.find((drawing) => selectedDrawingIds.has(drawing.id));
   const selectedLine = selectedConnection || selectedDrawing;
   const editingDrawingTool = drawMode && !selectedBoard && !selectedLine;
-  const hasSelection = Boolean(selectedBoard || selectedLine || editingDrawingTool);
+  const hasSelection = Boolean(selectedBoards.length || selectedLine || editingDrawingTool);
   propertiesPanel.classList.toggle("hidden", !hasSelection);
   propertiesPanel.setAttribute("aria-hidden", String(!hasSelection));
-  boardProperties.classList.toggle("hidden", !selectedBoard);
+  boardProperties.classList.toggle("hidden", !selectedBoards.length);
   lineProperties.classList.toggle("hidden", !(selectedLine || editingDrawingTool));
   if (!hasSelection) return;
 
-  if (selectedBoard) {
-    const isShape = selectedBoard.type === "shape";
-    propertiesTitle.textContent = isShape ? getShapeLabel(selectedBoard.shape) : selectedBoard.type === "image" ? "Image" : "Board";
-    const color = normalizeHexColor(selectedBoard.color || ticketColors[0]);
+  if (selectedBoards.length) {
+    const editableBoards = selectedBoards.filter((item) => item.type !== "image");
+    const referenceBoard = editableBoards[0] || selectedBoard;
+    const isShape = referenceBoard.type === "shape";
+    propertiesTitle.textContent = selectedBoards.length > 1
+      ? `${selectedBoards.length} selected boards`
+      : isShape ? getShapeLabel(referenceBoard.shape) : referenceBoard.type === "image" ? "Image" : "Board";
+    const color = normalizeHexColor(referenceBoard.color || ticketColors[0]);
     propertiesBoardColor.value = color;
     propertiesBoardHex.value = color;
-    propertiesBoardColor.disabled = selectedBoard.type === "image";
-    propertiesBoardHex.disabled = selectedBoard.type === "image";
-    propertiesBoardText.value = selectedBoard.text || htmlToPlainText(selectedBoard.html || "");
-    const textStyle = getItemTextStyle(selectedBoard);
+    propertiesBoardColor.disabled = !editableBoards.length;
+    propertiesBoardHex.disabled = !editableBoards.length;
+    propertiesBoardText.disabled = !editableBoards.length;
+    propertiesFontFamily.disabled = !editableBoards.length;
+    propertiesFontSize.disabled = !editableBoards.length;
+    propertiesTextColor.disabled = !editableBoards.length;
+    propertiesBold.disabled = !editableBoards.length;
+    propertiesItalic.disabled = !editableBoards.length;
+    propertiesUnderline.disabled = !editableBoards.length;
+    propertiesBoardText.value = referenceBoard.text || htmlToPlainText(referenceBoard.html || "");
+    const textStyle = getItemTextStyle(referenceBoard);
     propertiesFontFamily.value = textStyle.fontFamily;
     propertiesFontSize.value = String(textStyle.fontSize);
     propertiesTextColor.value = normalizeHexColor(textStyle.color || "#1d2733", "#1d2733");
@@ -55,7 +79,10 @@ function renderPropertiesPanel() {
   }
 
   if (selectedLine || editingDrawingTool) {
-    propertiesTitle.textContent = selectedConnection ? "Connection" : "Drawing";
+    const selectedLineCount = selectedConnectionIds.size + selectedDrawingIds.size;
+    propertiesTitle.textContent = selectedLineCount > 1
+      ? `${selectedLineCount} selected lines`
+      : selectedConnection ? "Connection" : "Drawing";
     const color = selectedLine
       ? normalizeHexColor(selectedLine.color || DEFAULT_CONNECTION_COLOR)
       : getCreationColor(DEFAULT_CONNECTION_COLOR);
@@ -71,6 +98,11 @@ function renderPropertiesPanel() {
     propertiesLineColor.value = color;
     propertiesLineThickness.value = String(thickness);
     propertiesLineThicknessLabel.textContent = `${thickness}px`;
+    const isConnection = Boolean(selectedConnection);
+    connectionSnapRow.classList.toggle("hidden", !isConnection);
+    propertiesLineSnapRow.classList.toggle("hidden", !isConnection);
+    connectionSnapGrid.checked = isConnection && selectedConnection.snapToGrid === true;
+    propertiesLineSnapGrid.checked = isConnection && selectedConnection.snapToGrid === true;
   }
 }
 
@@ -80,20 +112,32 @@ function getSelectedBoardItem(project = getActiveProject()) {
   return project.items.find((item) => item.id === selectedId) || null;
 }
 
+function getSelectedBoardItems(project = getActiveProject()) {
+  if (!project) return [];
+  const ids = new Set(selectedItemIds);
+  if (!ids.size && selectedBoardItemId) ids.add(selectedBoardItemId);
+  return project.items.filter((item) => ids.has(item.id));
+}
+
 function updateSelectedBoardColor(value) {
   if (!isValidHex(value)) return;
-  const item = getSelectedBoardItem();
-  if (!item || item.type === "image") return;
-  const before = structuredClone(item);
-  item.color = value;
+  const project = getActiveProject();
+  const items = getSelectedBoardItems(project).filter((item) => item.type !== "image");
+  if (!project || !items.length) return;
+  const commands = [];
+  items.forEach((item) => {
+    const before = structuredClone(item);
+    item.color = value;
+    const node = boardContent.querySelector(`[data-id="${item.id}"]`);
+    if (node) applyItemColorToNode(item, node);
+    commands.push(createHistoryCommand("updateItem", item.id, before, item, { projectId: project.id }));
+  });
   propertiesBoardColor.value = value;
   propertiesBoardHex.value = value;
-  const node = boardContent.querySelector(`[data-id="${item.id}"]`);
-  if (node) applyItemColorToNode(item, node);
   saveState({
-    historyEntry: createHistoryCommand("updateItem", item.id, before, item, {
-      projectId: state.activeProjectId,
-      groupKey: `item:${item.id}:color`
+    historyEntry: createBatchHistoryCommand("updateItemSelection", commands, {
+      targetId: items.map((item) => item.id).join(","),
+      groupKey: `items:${items.map((item) => item.id).sort().join(",")}:color`
     })
   });
 }
@@ -123,30 +167,36 @@ function getItemTextStyle(item) {
 }
 
 function updateSelectedBoardTextStyle(style) {
-  const item = getSelectedBoardItem();
-  if (!item) return;
-  const before = structuredClone(item);
-  const textStyle = getItemTextStyle(item);
-  Object.assign(textStyle, style);
-  textStyle.fontSize = clamp(Number(textStyle.fontSize) || 16, 10, 72);
-  const itemNode = boardContent.querySelector(`[data-id="${item.id}"]`);
-  const textNode = itemNode?.querySelector(".item-text");
-  if (textNode) {
-    applyTextStyleToNode(textNode, textStyle);
-    ensureItemFitsText(item, itemNode);
-    fitItemText(textNode, item);
-  }
+  const project = getActiveProject();
+  const items = getSelectedBoardItems(project).filter((item) => item.type !== "image");
+  if (!project || !items.length) return;
+  const commands = [];
+  items.forEach((item) => {
+    const before = structuredClone(item);
+    const textStyle = getItemTextStyle(item);
+    Object.assign(textStyle, style);
+    textStyle.fontSize = clamp(Number(textStyle.fontSize) || 16, 10, 72);
+    if (style.color) textStyle.color = normalizeHexColor(style.color, "#1d2733");
+    const itemNode = boardContent.querySelector(`[data-id="${item.id}"]`);
+    const textNode = itemNode?.querySelector(".item-text");
+    if (textNode) {
+      applyTextStyleToNode(textNode, textStyle);
+      ensureItemFitsText(item, itemNode);
+      fitItemText(textNode, item);
+    }
+    commands.push(createHistoryCommand("updateItem", item.id, before, item, { projectId: project.id }));
+  });
   renderPropertiesPanel();
   saveState({
-    historyEntry: createHistoryCommand("updateItem", item.id, before, item, {
-      projectId: state.activeProjectId,
-      groupKey: `item:${item.id}:text-style`
+    historyEntry: createBatchHistoryCommand("updateItemSelection", commands, {
+      targetId: items.map((item) => item.id).join(","),
+      groupKey: `items:${items.map((item) => item.id).sort().join(",")}:text-style:${Object.keys(style).sort().join(",")}`
     })
   });
 }
 
 function toggleSelectedBoardTextStyle(key) {
-  const item = getSelectedBoardItem();
+  const item = getSelectedBoardItems().find((candidate) => candidate.type !== "image");
   if (!item) return;
   const textStyle = getItemTextStyle(item);
   updateSelectedBoardTextStyle({ [key]: !textStyle[key] });
@@ -217,22 +267,27 @@ function ensureItemFitsText(item, node) {
 }
 
 function updateSelectedBoardText(value) {
-  const item = getSelectedBoardItem();
-  if (!item) return;
-  const before = structuredClone(item);
-  item.text = value;
-  item.html = escapeHtml(value).replace(/\n/g, "<br>");
-  const itemNode = boardContent.querySelector(`[data-id="${item.id}"]`);
-  const textNode = itemNode?.querySelector(".item-text");
-  ensureItemFitsText(item, itemNode);
-  if (textNode && textNode !== document.activeElement) {
-    textNode.innerHTML = item.html;
-    fitItemText(textNode, item);
-  }
+  const project = getActiveProject();
+  const items = getSelectedBoardItems(project).filter((item) => item.type !== "image");
+  if (!project || !items.length) return;
+  const commands = [];
+  items.forEach((item) => {
+    const before = structuredClone(item);
+    item.text = value;
+    item.html = escapeHtml(value).replace(/\n/g, "<br>");
+    const itemNode = boardContent.querySelector(`[data-id="${item.id}"]`);
+    const textNode = itemNode?.querySelector(".item-text");
+    ensureItemFitsText(item, itemNode);
+    if (textNode && textNode !== document.activeElement) {
+      textNode.innerHTML = item.html;
+      fitItemText(textNode, item);
+    }
+    commands.push(createHistoryCommand("updateItem", item.id, before, item, { projectId: project.id }));
+  });
   saveState({
-    historyEntry: createHistoryCommand("updateItem", item.id, before, item, {
-      projectId: state.activeProjectId,
-      groupKey: `item:${item.id}:text`
+    historyEntry: createBatchHistoryCommand("updateItemSelection", commands, {
+      targetId: items.map((item) => item.id).join(","),
+      groupKey: `items:${items.map((item) => item.id).sort().join(",")}:text`
     })
   });
 }
@@ -266,6 +321,12 @@ function updateSelectedConnections(style) {
     const before = structuredClone(connection);
     if (style.color) connection.color = style.color;
     if (style.thickness) connection.thickness = clamp(style.thickness, 1, 14);
+    if (Object.prototype.hasOwnProperty.call(style, "snapToGrid")) {
+      connection.snapToGrid = Boolean(style.snapToGrid);
+      if (connection.snapToGrid && typeof snapConnectionToGrid === "function") {
+        snapConnectionToGrid(connection, project);
+      }
+    }
     commands.push(createHistoryCommand("updateConnection", connection.id, before, connection, { projectId: project.id }));
   });
 
@@ -317,15 +378,35 @@ function updateDrawingToolSettings(style) {
 }
 
 function toggleBoardTheme() {
-  state.boardTheme = state.boardTheme === "dark" ? "light" : "dark";
+  setPersonalTheme(personalTheme === "dark" ? "light" : "dark");
+  render();
+}
+
+function toggleBoardGrid() {
+  state.boardGrid = state.boardGrid === "hidden" ? "visible" : "hidden";
   saveAndRender();
 }
 
 function renderProjects() {
   projectsList.innerHTML = "";
-  state.projects.forEach((project) => {
+  const projects = [...state.projects].sort((a, b) => {
+    if (Boolean(a.favorite) !== Boolean(b.favorite)) return a.favorite ? -1 : 1;
+    return (Number(b.modifiedAt) || 0) - (Number(a.modifiedAt) || 0);
+  });
+  projects.forEach((project) => {
     const row = document.createElement("div");
     row.className = `project-item ${project.id === state.activeProjectId ? "active" : ""}`;
+
+    const favoriteButton = document.createElement("button");
+    favoriteButton.type = "button";
+    favoriteButton.className = `favorite-project ${project.favorite ? "active" : ""}`;
+    favoriteButton.title = project.favorite ? "Remove favorite" : "Favorite project";
+    favoriteButton.setAttribute("aria-pressed", String(Boolean(project.favorite)));
+    favoriteButton.textContent = project.favorite ? "★" : "☆";
+    favoriteButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      toggleProjectFavorite(project.id);
+    });
 
     let selectButton;
     if (renamingProjectId === project.id) {
@@ -346,7 +427,11 @@ function renderProjects() {
       selectButton = document.createElement("button");
       selectButton.type = "button";
       selectButton.className = "project-select";
-      selectButton.innerHTML = `<span>${escapeHtml(project.name)}</span><strong>${project.tasks.length}</strong>`;
+      selectButton.innerHTML = `
+        <span class="project-name">${escapeHtml(project.name)}</span>
+        <small>Modified ${formatProjectModified(project.modifiedAt)}</small>
+        <strong>${project.tasks.length}</strong>
+      `;
       selectButton.addEventListener("click", () => {
         switchActiveProject(project.id);
       });
@@ -369,9 +454,30 @@ function renderProjects() {
       renameProject(project.id);
     });
 
-    row.append(selectButton, renameButton, deleteButton);
+    row.append(favoriteButton, selectButton, renameButton, deleteButton);
     projectsList.append(row);
   });
+}
+
+function formatProjectModified(value) {
+  const stamp = Number(value) || 0;
+  if (!stamp) return "unknown";
+  const diff = Date.now() - stamp;
+  const minute = 60 * 1000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+  if (diff < minute) return "just now";
+  if (diff < hour) return `${Math.max(1, Math.floor(diff / minute))}m ago`;
+  if (diff < day) return `${Math.max(1, Math.floor(diff / hour))}h ago`;
+  return new Date(stamp).toLocaleDateString();
+}
+
+function toggleProjectFavorite(projectId) {
+  const project = state.projects.find((candidate) => candidate.id === projectId);
+  if (!project) return;
+  project.favorite = !project.favorite;
+  saveState({ projectId });
+  render();
 }
 
 function switchActiveProject(projectId) {
@@ -426,9 +532,11 @@ function renderWorkspace() {
         return;
       }
       if (isBoardDragBlocked(event.target)) {
-        if (!selectedItemIds.has(item.id)) selectedItemIds = new Set([item.id]);
-        selectedConnectionIds.clear();
-        selectedDrawingIds.clear();
+        if (!selectedItemIds.has(item.id)) {
+          selectedItemIds = new Set([item.id]);
+          selectedConnectionIds.clear();
+          selectedDrawingIds.clear();
+        }
         selectedBoardItemId = item.id;
         renderSelectionClasses();
         renderPropertiesPanel();
@@ -443,9 +551,11 @@ function renderWorkspace() {
         enterItemTextEdit(event, node, item);
         return;
       }
-      if (!selectedItemIds.has(item.id)) selectedItemIds = new Set([item.id]);
-      selectedConnectionIds.clear();
-      selectedDrawingIds.clear();
+      if (!selectedItemIds.has(item.id)) {
+        selectedItemIds = new Set([item.id]);
+        selectedConnectionIds.clear();
+        selectedDrawingIds.clear();
+      }
       selectedBoardItemId = item.id;
       renderSelectionClasses();
       renderPropertiesPanel();

@@ -56,7 +56,7 @@
             <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg>
           </span>
         </button>
-        <button id="tasks-drawer-toggle" class="drawer-toggle drawer-toggle-right" type="button" aria-expanded="false" aria-controls="side-drawer" title="Task list">
+        <button id="tasks-drawer-toggle" class="drawer-toggle drawer-toggle-right" type="button" aria-expanded="false" aria-controls="side-drawer" title="Actions board">
           <span class="toggle-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
           </span>
@@ -73,11 +73,11 @@
         </button>
       </div>
       <aside id="projects-drawer" class="projects-panel drawer drawer-left">
+        <div id="workspace-drawer-resize" class="drawer-resize-handle" role="separator" aria-orientation="vertical" aria-label="Resize workspace panel"></div>
         <div class="brand-row">
           <div class="brand-identity">
             <img class="brand-logo" src="Flow_Board_logo_clean.png" alt="FlowBoard logo" />
             <div>
-              <p class="eyebrow">Workspace</p>
               <h2>FlowBoard</h2>
             </div>
           </div>
@@ -162,14 +162,18 @@
             <input id="properties-line-thickness" type="range" min="1" max="24" step="1" value="3" />
           </label>
           <span id="properties-line-thickness-label">3px</span>
+          <label id="properties-line-snap-row" class="toggle-row">
+            <input id="properties-line-snap-grid" type="checkbox" />
+            Snap to grid
+          </label>
         </section>
       </aside>
 
       <section class="workspace">
         <header class="topbar">
           <div class="topbar-title">
-            <img class="topbar-logo" src="Flow_Board_logo_clean.png" alt="FlowBoard logo" />
-            <div>
+            <img class="topbar-logo" src="Flow_Board_transparent.png" alt="FlowBoard logo" />
+            <div class="topbar-project-copy">
               <p class="eyebrow">Active project</p>
               <h1 id="active-project-title">No project</h1>
             </div>
@@ -197,6 +201,20 @@
                 <svg class="shape-tool-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4l11-11a2.8 2.8 0 0 0-4-4L4 16Z"></path><path d="M13 6l5 5"></path></svg>
               </button>
             </div>
+            <select id="template-select" class="template-select" aria-label="Add layout">
+              <option value="">Layouts</option>
+              <option value="one-to-three">1 to 3</option>
+              <option value="one-to-six">1 to 6</option>
+            </select>
+            <button id="board-grid-btn" class="ghost-button icon-button" type="button" title="Hide grid" aria-label="Hide grid" aria-pressed="false">
+              <svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 4h16v16H4Z"></path>
+                <path d="M4 10h16"></path>
+                <path d="M4 16h16"></path>
+                <path d="M10 4v16"></path>
+                <path d="M16 4v16"></path>
+              </svg>
+            </button>
             <button id="board-theme-btn" class="ghost-button" type="button">Dark background</button>
             <button id="top-logout-btn" class="ghost-button" type="button">Log out</button>
           </div>
@@ -218,23 +236,31 @@
               <input id="connection-thickness" type="range" min="1" max="24" step="1" value="3" />
             </label>
             <span id="connection-thickness-label">3px</span>
+            <label id="connection-snap-row" class="toggle-row">
+              <input id="connection-snap-grid" type="checkbox" />
+              Snap grid
+            </label>
           </div>
           <div id="zoom-indicator" class="zoom-indicator">100%</div>
         </div>
       </section>
 
       <aside id="side-drawer" class="side-panel drawer drawer-right">
+        <div id="side-drawer-resize" class="drawer-resize-handle" role="separator" aria-orientation="vertical" aria-label="Resize side panel"></div>
         <button id="close-side-drawer" class="drawer-close ghost-button drawer-internal-close" type="button">&gt;</button>
         <section id="hours-panel" class="hours-panel collapsible-panel">
           <div class="section-title">
             <button id="toggle-hours" class="collapse-button panel-internal-toggle" type="button" aria-expanded="true" aria-controls="hours-content">v</button>
             <div class="section-copy">
-              <p class="eyebrow">Planning</p>
               <h2>Project hours</h2>
             </div>
             <span id="hours-total-label" class="timer-label">0h</span>
           </div>
           <div id="hours-content" class="panel-content">
+            <div class="hours-mode-toggle" role="group" aria-label="Hours mode">
+              <button id="hours-final-mode" type="button" class="active">Final</button>
+              <button id="hours-edit-mode" type="button">Edit</button>
+            </div>
             <div class="hours-input-row">
               <label for="project-hours">SET HOURS</label>
               <input id="project-hours" type="number" min="0" step="0.5" value="40" />
@@ -248,15 +274,14 @@
           <div class="section-title">
             <button id="toggle-tasks" class="collapse-button panel-internal-toggle" type="button" aria-expanded="true" aria-controls="tasks-content">v</button>
             <div class="section-copy">
-              <p class="eyebrow">Execution</p>
-              <h2>Task list</h2>
+              <h2>Actions board</h2>
             </div>
             <span id="task-count" class="counter">0/0</span>
           </div>
           <div id="tasks-content" class="panel-content">
-            <form id="task-form" class="compact-form">
-              <input id="task-title" type="text" placeholder="Add task" />
-              <button type="submit">+</button>
+            <form id="task-form" class="compact-form kanban-status-form">
+              <input id="task-title" type="text" placeholder="Add status" />
+              <button type="submit">+ Status</button>
             </form>
             <div id="tasks-list" class="tasks-list"></div>
           </div>
@@ -266,7 +291,6 @@
           <div class="section-title">
             <button id="toggle-story" class="collapse-button panel-internal-toggle" type="button" aria-expanded="true" aria-controls="story-content">v</button>
             <div class="section-copy">
-              <p class="eyebrow">Narrative</p>
               <h2>Game story</h2>
             </div>
             <span id="story-count" class="counter">0</span>
@@ -284,7 +308,6 @@
           <div class="section-title">
             <button id="toggle-team" class="collapse-button panel-internal-toggle" type="button" aria-expanded="true" aria-controls="team-content">v</button>
             <div class="section-copy">
-              <p class="eyebrow">Production</p>
               <h2>Team roles</h2>
             </div>
             <span id="team-count" class="counter">0</span>

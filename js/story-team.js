@@ -37,7 +37,7 @@ function addStoryNode(parentId, rawTitle) {
   const project = getActiveProject();
   if (!project) return;
   project.story ??= [];
-  const title = String(rawTitle || "").trim() || "New story section";
+  const title = cleanUserText(rawTitle, 100, "New story section");
   const beforeStory = structuredClone(project.story);
   const node = {
     id: crypto.randomUUID(),
@@ -65,13 +65,15 @@ function updateStoryNode(id, patch) {
   const node = findStoryNode(project.story || [], id);
   if (!node) return;
   const beforeStory = structuredClone(project.story);
-  Object.assign(node, patch);
+  if (Object.prototype.hasOwnProperty.call(patch, "title")) node.title = cleanUserText(patch.title, 100, "Story section");
+  if (Object.prototype.hasOwnProperty.call(patch, "notes")) node.notes = String(patch.notes || "").slice(0, 5000);
   saveStoryChange(project, beforeStory, `project:${project.id}:story:${id}`);
 }
 
-function deleteStoryNode(id) {
+async function deleteStoryNode(id) {
   const project = getActiveProject();
   if (!project) return;
+  if (!await confirmDangerousAction("Delete this story section and its subdivisions?")) return;
   const beforeStory = structuredClone(project.story || []);
   if (!removeStoryNode(project.story, id)) return;
   saveStoryChange(project, beforeStory);
@@ -107,7 +109,7 @@ function renderStoryNodes(nodes, container, depth) {
     title.className = "story-node-title";
     title.value = node.title || "";
     title.placeholder = "Story division";
-    title.addEventListener("change", () => updateStoryNode(node.id, { title: title.value.trim() || "Story section" }));
+    title.addEventListener("change", () => updateStoryNode(node.id, { title: title.value }));
 
     const addButton = document.createElement("button");
     addButton.type = "button";
@@ -157,8 +159,8 @@ function saveTeamChange(project, beforeRoles, groupKey = `project:${project.id}:
 function addTeamRole(rawName, rawRole) {
   const project = getActiveProject();
   if (!project) return;
-  const role = rawRole.trim();
-  const name = rawName.trim();
+  const role = cleanUserText(rawRole, 80);
+  const name = cleanUserText(rawName, 80);
   if (!name && !role) return;
   project.teamRoles ??= [];
   const beforeRoles = structuredClone(project.teamRoles);
@@ -170,6 +172,7 @@ function addTeamRole(rawName, rawRole) {
   });
   saveTeamChange(project, beforeRoles);
   renderTeamRoles();
+  renderTasks();
 }
 
 function updateTeamRole(id, patch) {
@@ -178,17 +181,22 @@ function updateTeamRole(id, patch) {
   const member = (project.teamRoles || []).find((candidate) => candidate.id === id);
   if (!member) return;
   const beforeRoles = structuredClone(project.teamRoles);
-  Object.assign(member, patch);
+  if (Object.prototype.hasOwnProperty.call(patch, "name")) member.name = cleanUserText(patch.name, 80, "Team member");
+  if (Object.prototype.hasOwnProperty.call(patch, "role")) member.role = cleanUserText(patch.role, 80, "Role");
+  if (Object.prototype.hasOwnProperty.call(patch, "notes")) member.notes = String(patch.notes || "").slice(0, 3000);
   saveTeamChange(project, beforeRoles, `project:${project.id}:teamRole:${id}`);
+  renderTasks();
 }
 
-function deleteTeamRole(id) {
+async function deleteTeamRole(id) {
   const project = getActiveProject();
   if (!project) return;
+  if (!await confirmDangerousAction("Remove this team role?")) return;
   const beforeRoles = structuredClone(project.teamRoles || []);
   project.teamRoles = (project.teamRoles || []).filter((member) => member.id !== id);
   saveTeamChange(project, beforeRoles);
   renderTeamRoles();
+  renderTasks();
 }
 
 function renderTeamRoles() {
@@ -215,12 +223,12 @@ function renderTeamRoles() {
     const name = document.createElement("input");
     name.value = member.name || "";
     name.placeholder = "Name";
-    name.addEventListener("change", () => updateTeamRole(member.id, { name: name.value.trim() || "Team member" }));
+    name.addEventListener("change", () => updateTeamRole(member.id, { name: name.value }));
 
     const role = document.createElement("input");
     role.value = member.role || "";
     role.placeholder = "Role";
-    role.addEventListener("change", () => updateTeamRole(member.id, { role: role.value.trim() || "Role" }));
+    role.addEventListener("change", () => updateTeamRole(member.id, { role: role.value }));
 
     const deleteButton = document.createElement("button");
     deleteButton.type = "button";
@@ -241,3 +249,4 @@ function renderTeamRoles() {
     teamRoleList.append(row);
   });
 }
+

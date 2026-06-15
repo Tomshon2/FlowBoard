@@ -2,5 +2,10 @@
   "name": "flowboard",
   "version": "1.0.0",
   "private": true,
-  "description": "FlowBoard static frontend powered by Supabase."
+  "description": "FlowBoard static frontend powered by Supabase.",
+  "scripts": {
+    "start": "node server/static-server.js",
+    "dev": "node server/static-server.js",
+    "lint": "node scripts/check-js.js"
+  }
 }

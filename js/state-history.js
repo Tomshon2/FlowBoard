@@ -15,13 +15,83 @@ function normalizeStoryNodes(nodes = []) {
   }));
 }
 
+function normalizeTaskBoard(project) {
+  const defaultColumns = createDefaultTaskColumns();
+  const incomingColumns = Array.isArray(project.taskColumns) && project.taskColumns.length
+    ? project.taskColumns
+    : defaultColumns;
+  project.taskColumns = incomingColumns.map((column, index) => ({
+    id: column.id || crypto.randomUUID(),
+    title: String(column.title || `Status ${index + 1}`),
+    color: normalizeHexColor(column.color || defaultColumns[index % defaultColumns.length]?.color || "#434bd7", "#434bd7"),
+    order: Number.isFinite(Number(column.order)) ? Number(column.order) : index
+  })).sort((a, b) => a.order - b.order).map((column, index) => ({
+    ...column,
+    order: index
+  }));
+
+  const columnIds = new Set(project.taskColumns.map((column) => column.id));
+  const todoColumn = project.taskColumns.find((column) => column.id === "todo") || project.taskColumns[0];
+  const doneColumn = project.taskColumns.find((column) => column.id === "done") || project.taskColumns.find((column) => column.title.toLowerCase() === "done") || project.taskColumns[project.taskColumns.length - 1];
+  const orderByColumn = new Map();
+  const teamMemberIds = new Set((Array.isArray(project.teamRoles) ? project.teamRoles : []).map((member) => member.id).filter(Boolean));
+  project.tasks = (Array.isArray(project.tasks) ? project.tasks : []).map((task) => {
+    const fallbackColumnId = task.done ? doneColumn.id : todoColumn.id;
+    const columnId = columnIds.has(task.columnId) ? task.columnId : fallbackColumnId;
+    const order = Number.isFinite(Number(task.order)) ? Number(task.order) : orderByColumn.get(columnId) || 0;
+    orderByColumn.set(columnId, Math.max(orderByColumn.get(columnId) || 0, order + 1));
+    const assigneeIds = Array.isArray(task.assigneeIds)
+      ? task.assigneeIds.filter((id) => !teamMemberIds.size || teamMemberIds.has(id))
+      : [];
+    return {
+      id: task.id || crypto.randomUUID(),
+      title: String(task.title || "New task"),
+      columnId,
+      done: columnId === doneColumn.id,
+      order,
+      estimateHours: clamp(Number(task.estimateHours) || 0, 0, 999),
+      progress: clamp(Number(task.progress) || 0, 0, 100),
+      description: String(task.description || ""),
+      assigneeIds
+    };
+  });
+}
+
+function normalizeHourPlan(project) {
+  const fallbackPlan = createDefaultHourPlan();
+  const sourcePlan = Array.isArray(project.hourPlan) && project.hourPlan.length ? project.hourPlan : fallbackPlan;
+  project.hourPlan = sourcePlan.map((phase, phaseIndex) => ({
+    id: phase.id || crypto.randomUUID(),
+    title: String(phase.title || `Phase ${phaseIndex + 1}`),
+    percent: clamp(Number(phase.percent) || 0, 0, 100),
+    order: Number.isFinite(Number(phase.order)) ? Number(phase.order) : phaseIndex,
+    tasks: (Array.isArray(phase.tasks) ? phase.tasks : []).map((task, taskIndex) => ({
+      id: task.id || crypto.randomUUID(),
+      title: String(task.title || `Task ${taskIndex + 1}`),
+      percent: clamp(Number(task.percent) || 0, 0, 100),
+      order: Number.isFinite(Number(task.order)) ? Number(task.order) : taskIndex
+    })).sort((a, b) => a.order - b.order).map((task, taskIndex) => ({
+      ...task,
+      order: taskIndex
+    }))
+  })).sort((a, b) => a.order - b.order).map((phase, phaseIndex) => ({
+    ...phase,
+    order: phaseIndex
+  }));
+}
+
 function normalizeState() {
   state.boardTheme = state.boardTheme === "dark" ? "dark" : "light";
+  state.boardGrid = state.boardGrid === "hidden" ? "hidden" : "visible";
   state.updatedAt = Number(state.updatedAt) || 0;
   latestLocalStateStamp = Math.max(latestLocalStateStamp, state.updatedAt);
   state.projects.forEach((project) => {
+    project.favorite = Boolean(project.favorite);
+    project.modifiedAt = Number(project.modifiedAt) || Number(state.updatedAt) || 0;
     project.totalHours ??= project.timerMinutes ? project.timerMinutes / 60 : 40;
     project.connections ??= [];
+    normalizeHourPlan(project);
+    normalizeTaskBoard(project);
     project.story = normalizeStoryNodes(project.story);
     project.teamRoles = (Array.isArray(project.teamRoles) ? project.teamRoles : []).map((member) => ({
       id: member.id || crypto.randomUUID(),
@@ -44,10 +114,17 @@ function normalizeState() {
         color: DEFAULT_CONNECTION_COLOR,
         thickness: DEFAULT_CONNECTION_THICKNESS,
         manualBend: false,
+        manualPoints: [],
+        snapToGrid: false,
         ...connection,
+        snapToGrid: connection.snapToGrid === true,
+        manualPoints: Array.isArray(connection.manualPoints)
+          ? connection.manualPoints
+            .filter((point) => Number.isFinite(point?.x) && Number.isFinite(point?.y))
+            .map((point) => normalizeConnectionPoint(point, connection.snapToGrid === true))
+          : [],
         thickness: clamp(Number(connection.thickness) || DEFAULT_CONNECTION_THICKNESS, 1, 14)
       };
-      delete normalized.manualPoints;
       delete normalized.manualRoute;
       return normalized;
     });
@@ -76,7 +153,7 @@ function normalizeState() {
 function saveState(options = {}) {
   if (interactionLock) return;
   recordHistoryChange(options);
-  touchLocalState();
+  touchLocalState(getTouchedProjectIds(options));
   lastHistorySnapshot = getHistorySnapshot();
   persistStateLocally();
   queueRemoteSave();
@@ -84,7 +161,7 @@ function saveState(options = {}) {
 
 function commitState(options = {}) {
   recordHistoryChange(options);
-  touchLocalState();
+  touchLocalState(getTouchedProjectIds(options));
   lastHistorySnapshot = getHistorySnapshot();
   persistStateLocally();
   queueRemoteSave();
@@ -355,10 +432,25 @@ function pruneSelectionToState() {
   }
 }
 
-function touchLocalState() {
+function getTouchedProjectIds(options = {}) {
+  if (options.skipProjectTouch) return [];
+  const entries = [
+    ...(Array.isArray(options.historyEntries) ? options.historyEntries : []),
+    ...(options.historyEntry ? [options.historyEntry] : [])
+  ];
+  const ids = new Set(entries.map((entry) => entry?.projectId).filter(Boolean));
+  if (options.projectId) ids.add(options.projectId);
+  return [...ids];
+}
+
+function touchLocalState(projectIds = []) {
   const nextStamp = Math.max(Date.now(), latestLocalStateStamp + 1);
   state.updatedAt = nextStamp;
   latestLocalStateStamp = nextStamp;
+  projectIds.forEach((projectId) => {
+    const project = state.projects.find((candidate) => candidate.id === projectId);
+    if (project) project.modifiedAt = nextStamp;
+  });
 }
 
 function queueRemoteSave() {
@@ -381,7 +473,7 @@ async function saveStateRemoteNow() {
 }
 
 function saveAndRender() {
-  saveState();
+  saveState({ skipProjectTouch: true });
   render();
 }
 

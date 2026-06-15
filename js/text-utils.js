@@ -87,13 +87,97 @@ function getStyleTitle(command) {
 function sanitizeEditableHtml(html) {
   const template = document.createElement("template");
   template.innerHTML = html;
-  template.content.querySelectorAll("script, style, iframe, object").forEach((node) => node.remove());
+  template.content.querySelectorAll("script, style, iframe, object, embed, link, meta").forEach((node) => node.remove());
   template.content.querySelectorAll("*").forEach((node) => {
     [...node.attributes].forEach((attribute) => {
-      if (attribute.name.startsWith("on")) node.removeAttribute(attribute.name);
+      const name = attribute.name.toLowerCase();
+      const value = String(attribute.value || "");
+      if (name.startsWith("on")) {
+        node.removeAttribute(attribute.name);
+        return;
+      }
+      if (["href", "src", "xlink:href"].includes(name) && /^\s*javascript:/i.test(value)) {
+        node.removeAttribute(attribute.name);
+        return;
+      }
+      if (name === "style") {
+        const safeStyle = sanitizeInlineStyle(value);
+        if (safeStyle) {
+          node.setAttribute("style", safeStyle);
+        } else {
+          node.removeAttribute("style");
+        }
+        return;
+      }
+      if (!["class", "title", "aria-label"].includes(name)) node.removeAttribute(attribute.name);
     });
   });
   return template.innerHTML;
+}
+
+function sanitizeInlineStyle(value) {
+  const safeRules = [];
+  value.split(";").forEach((rule) => {
+    const [rawProperty, ...rawValueParts] = rule.split(":");
+    const property = rawProperty?.trim().toLowerCase();
+    const ruleValue = rawValueParts.join(":").trim();
+    if (!property || !ruleValue || /url\s*\(|expression\s*\(|javascript:/i.test(ruleValue)) return;
+    if (property === "font-size" && /^([1-4]?\d|50)px$/.test(ruleValue)) safeRules.push(`${property}: ${ruleValue}`);
+    if (property === "font-family" && /^[\w\s"',-]{1,80}$/.test(ruleValue)) safeRules.push(`${property}: ${ruleValue}`);
+    if (property === "color" && (/^#[0-9a-fA-F]{6}$/.test(ruleValue) || /^rgb\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*\)$/.test(ruleValue))) {
+      safeRules.push(`${property}: ${ruleValue}`);
+    }
+    if (["font-weight", "font-style", "text-decoration-line"].includes(property) && /^[a-z0-9\s-]{1,32}$/i.test(ruleValue)) {
+      safeRules.push(`${property}: ${ruleValue}`);
+    }
+  });
+  return safeRules.join("; ");
+}
+
+function cleanUserText(value, maxLength = 120, fallback = "") {
+  const cleaned = String(value || "").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim();
+  return cleaned ? cleaned.slice(0, maxLength) : fallback;
+}
+
+function confirmDangerousAction(message) {
+  return new Promise((resolve) => {
+    document.querySelector(".delete-confirm-backdrop")?.remove();
+
+    const backdrop = document.createElement("div");
+    backdrop.className = "delete-confirm-backdrop";
+    backdrop.innerHTML = `
+      <section class="delete-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-confirm-title">
+        <div class="delete-confirm-icon" aria-hidden="true">!</div>
+        <div class="delete-confirm-copy">
+          <p class="eyebrow">Confirm delete</p>
+          <h2 id="delete-confirm-title">Delete this?</h2>
+          <p>${escapeHtml(message)}</p>
+        </div>
+        <div class="delete-confirm-actions">
+          <button type="button" class="delete-confirm-cancel">Cancel</button>
+          <button type="button" class="delete-confirm-delete">Delete</button>
+        </div>
+      </section>
+    `;
+
+    const close = (confirmed) => {
+      backdrop.remove();
+      document.removeEventListener("keydown", handleKeydown);
+      resolve(confirmed);
+    };
+    const handleKeydown = (event) => {
+      if (event.key === "Escape") close(false);
+    };
+
+    backdrop.addEventListener("click", (event) => {
+      if (event.target === backdrop) close(false);
+    });
+    backdrop.querySelector(".delete-confirm-cancel").addEventListener("click", () => close(false));
+    backdrop.querySelector(".delete-confirm-delete").addEventListener("click", () => close(true));
+    document.addEventListener("keydown", handleKeydown);
+    document.body.append(backdrop);
+    backdrop.querySelector(".delete-confirm-cancel").focus();
+  });
 }
 
 function normalizeHexColor(value, fallback = "#fff1b8") {

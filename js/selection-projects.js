@@ -1,9 +1,10 @@
-﻿function removeBoardItem(id) {
+async function removeBoardItem(id) {
   const project = getActiveProject();
   if (!project) return;
   const item = project.items.find((candidate) => candidate.id === id);
   const connections = project.connections.filter((connection) => connection.from === id || connection.to === id);
   if (!item) return;
+  if (!await confirmDangerousAction("Delete this board element?")) return;
   project.items = project.items.filter((item) => item.id !== id);
   project.connections = project.connections.filter((connection) => connection.from !== id && connection.to !== id);
   saveState({
@@ -19,14 +20,22 @@
   render();
 }
 
-function deleteProject(id) {
+async function deleteProject(id) {
+  const project = state.projects.find((candidate) => candidate.id === id);
+  if (project && !await confirmDangerousAction(`Delete project "${project.name}"? This cannot be undone.`)) return;
   state.projects = state.projects.filter((project) => project.id !== id);
   if (!state.projects.length) {
     const newProject = {
       id: crypto.randomUUID(),
       name: "New project",
+      favorite: false,
+      modifiedAt: Date.now(),
       totalHours: 40,
+      hourPlan: createDefaultHourPlan(),
       tasks: [],
+      taskColumns: createDefaultTaskColumns(),
+      story: [],
+      teamRoles: [],
       items: [],
       connections: []
     };
@@ -47,7 +56,10 @@ function finishRenameProject(id, value) {
   const project = state.projects.find((candidate) => candidate.id === id);
   if (!project) return;
   const nextName = value.trim();
-  if (nextName) project.name = nextName;
+  if (nextName) {
+    project.name = nextName;
+    project.modifiedAt = Date.now();
+  }
   renamingProjectId = null;
   saveAndRender();
 }
@@ -253,7 +265,9 @@ function createConnection(fromId, toId, from, to, forcedFromSide, forcedToSide) 
     bendAxis,
     color: getCreationColor(DEFAULT_CONNECTION_COLOR),
     thickness: DEFAULT_CONNECTION_THICKNESS,
-    manualBend: false
+    manualBend: false,
+    manualPoints: [],
+    snapToGrid: false
   };
   connection.bend = getDefaultConnectionBend(connection, { items: [from, to] });
   return connection;
@@ -285,21 +299,18 @@ function startDrag(event, id) {
   if (!selectedItemIds.has(id)) {
     selectedItemIds = new Set([id]);
     selectedDrawingIds.clear();
+    selectedConnectionIds.clear();
   }
-  selectedConnectionIds.clear();
   selectedBoardItemId = id;
   renderSelectionClasses();
   const selectedItems = project.items
     .filter((candidate) => selectedItemIds.has(candidate.id))
     .map((candidate) => ({ item: candidate, x: candidate.x, y: candidate.y }));
   const beforeItems = selectedItems.map(({ item: selectedItem }) => structuredClone(selectedItem));
-  const selectedDrawings = (project.drawings || [])
-    .filter((drawing) => selectedDrawingIds.has(drawing.id))
-    .map((drawing) => ({
-      drawing,
-      points: drawing.points.map((point) => ({ ...point }))
-    }));
+  const selectedDrawings = getSelectedDrawingDragData(project);
   const beforeDrawings = selectedDrawings.map(({ drawing }) => structuredClone(drawing));
+  const selectedConnections = getSelectedConnectionDragData(project);
+  const beforeConnections = selectedConnections.map(({ connection }) => structuredClone(connection));
   const origin = {
     pointerX: event.clientX,
     pointerY: event.clientY
@@ -326,6 +337,7 @@ function startDrag(event, id) {
         y: Math.round(clamp(point.y + dy, 0, 4200))
       }));
     });
+    moveSelectedConnections(selectedConnections, dx, dy);
     renderDrawings(project);
     connectionsLayer.innerHTML = "";
     renderConnections(project);
@@ -370,7 +382,9 @@ function startDrag(event, id) {
       ...selectedItems.map(({ item: selectedItem }, index) =>
         createHistoryCommand("updateItem", selectedItem.id, beforeItems[index], selectedItem, { projectId: project.id })),
       ...selectedDrawings.map(({ drawing }, index) =>
-        createHistoryCommand("updateDrawing", drawing.id, beforeDrawings[index], drawing, { projectId: project.id }))
+        createHistoryCommand("updateDrawing", drawing.id, beforeDrawings[index], drawing, { projectId: project.id })),
+      ...selectedConnections.map(({ connection }, index) =>
+        createHistoryCommand("updateConnection", connection.id, beforeConnections[index], connection, { projectId: project.id }))
     ];
     commitState({
       historyEntry: createBatchHistoryCommand("moveSelection", commands, {
@@ -394,8 +408,170 @@ function startDrag(event, id) {
   element.addEventListener("lostpointercapture", end);
 }
 
+function getSelectedDrawingDragData(project) {
+  return (project.drawings || [])
+    .filter((drawing) => selectedDrawingIds.has(drawing.id))
+    .map((drawing) => ({
+      drawing,
+      points: drawing.points.map((point) => ({ ...point }))
+    }));
+}
+
+function getSelectedConnectionDragData(project) {
+  return project.connections
+    .filter((connection) => selectedConnectionIds.has(connection.id))
+    .map((connection) => {
+      const from = project.items.find((item) => item.id === connection.from);
+      const to = project.items.find((item) => item.id === connection.to);
+      const route = from && to ? getConnectionRoute(connection, from, to, project) : null;
+      const savedPoints = getConnectionManualPoints(connection);
+      const routePoints = route?.manualPoints || [];
+      return {
+        connection,
+        manualPoints: (savedPoints.length ? savedPoints : routePoints).map((point) => ({ ...point })),
+        bend: Number(connection.bend),
+        bendAxis: connection.bendAxis
+      };
+    });
+}
+
+function moveSelectedConnections(selectedConnections, dx, dy) {
+  selectedConnections.forEach(({ connection, manualPoints, bend, bendAxis }) => {
+    if (manualPoints.length) {
+      connection.manualPoints = manualPoints.map((point) => {
+        const movedPoint = {
+          x: Math.round(clamp(point.x + dx, 0, 6400)),
+          y: Math.round(clamp(point.y + dy, 0, 4200))
+        };
+        return connection.snapToGrid && typeof snapConnectionPointToGrid === "function"
+          ? snapConnectionPointToGrid(movedPoint)
+          : movedPoint;
+      });
+      connection.manualBend = true;
+      return;
+    }
+
+    if (!Number.isFinite(bend) || !["x", "y"].includes(bendAxis)) return;
+    const max = bendAxis === "x" ? 6400 : 4200;
+    const movedBend = Math.round(clamp(bend + (bendAxis === "x" ? dx : dy), 0, max));
+    connection.bend = connection.snapToGrid && typeof snapConnectionValueToGrid === "function"
+      ? snapConnectionValueToGrid(movedBend, max)
+      : movedBend;
+    connection.manualBend = true;
+  });
+}
+
+function startConnectionSelectionDrag(event, project, connectionId) {
+  if (!project || event.button !== 0 || !selectedConnectionIds.has(connectionId)) return false;
+  const selectedItems = project.items
+    .filter((candidate) => selectedItemIds.has(candidate.id))
+    .map((candidate) => ({ item: candidate, x: candidate.x, y: candidate.y }));
+  const selectedDrawings = getSelectedDrawingDragData(project);
+  const selectedConnections = getSelectedConnectionDragData(project);
+  if (selectedItems.length + selectedDrawings.length + selectedConnections.length <= 1) return false;
+
+  event.preventDefault();
+  event.stopPropagation();
+  event.stopImmediatePropagation();
+  if (typeof clearNearbyConnectionDots === "function") clearNearbyConnectionDots();
+  selectedBoardItemId = selectedBoardItemId && selectedItemIds.has(selectedBoardItemId) ? selectedBoardItemId : null;
+  renderSelectionClasses();
+  renderPropertiesPanel();
+
+  const beforeItems = selectedItems.map(({ item: selectedItem }) => structuredClone(selectedItem));
+  const beforeDrawings = selectedDrawings.map(({ drawing }) => structuredClone(drawing));
+  const beforeConnections = selectedConnections.map(({ connection }) => structuredClone(connection));
+  const origin = {
+    pointerX: event.clientX,
+    pointerY: event.clientY
+  };
+  let dragEnded = false;
+
+  interactionLock = true;
+  board.classList.add("dragging-board", "dragging-connection");
+
+  const move = (moveEvent) => {
+    if (typeof isSameConnectionPointer === "function" && !isSameConnectionPointer(moveEvent, pointerCapture.pointerId)) return;
+    if (!Number.isFinite(moveEvent?.clientX) || !Number.isFinite(moveEvent?.clientY)) return;
+    moveEvent.preventDefault();
+    const dx = (moveEvent.clientX - origin.pointerX) / boardZoom;
+    const dy = (moveEvent.clientY - origin.pointerY) / boardZoom;
+    selectedItems.forEach(({ item: selectedItem, x, y }) => {
+      selectedItem.x = clamp(x + dx, 0, 6400 - (selectedItem.width || 210));
+      selectedItem.y = clamp(y + dy, 0, 4200 - (selectedItem.height || 140));
+      const selectedElement = board.querySelector(`[data-id="${selectedItem.id}"]`);
+      if (selectedElement) {
+        selectedElement.style.left = `${selectedItem.x}px`;
+        selectedElement.style.top = `${selectedItem.y}px`;
+      }
+    });
+    selectedDrawings.forEach(({ drawing, points }) => {
+      drawing.points = points.map((point) => ({
+        x: Math.round(clamp(point.x + dx, 0, 6400)),
+        y: Math.round(clamp(point.y + dy, 0, 4200))
+      }));
+    });
+    moveSelectedConnections(selectedConnections, dx, dy);
+    renderDrawings(project);
+    connectionsLayer.innerHTML = "";
+    renderConnections(project);
+  };
+
+  const restoreBeforeState = () => {
+    selectedItems.forEach(({ item: selectedItem }, index) => Object.assign(selectedItem, structuredClone(beforeItems[index])));
+    selectedDrawings.forEach(({ drawing }, index) => Object.assign(drawing, structuredClone(beforeDrawings[index])));
+    selectedConnections.forEach(({ connection }, index) => Object.assign(connection, structuredClone(beforeConnections[index])));
+  };
+
+  const end = (endEvent = {}) => {
+    if (typeof isSameConnectionPointer === "function" && !isSameConnectionPointer(endEvent, pointerCapture.pointerId)) return;
+    if (dragEnded) return;
+    dragEnded = true;
+    move(endEvent);
+    const cancelled = endEvent.type === "pointercancel" || endEvent.type === "blur";
+    if (cancelled) restoreBeforeState();
+    if (typeof endConnectionPointerCapture === "function") endConnectionPointerCapture(pointerCapture);
+    interactionLock = false;
+    board.classList.remove("dragging-board", "dragging-connection");
+    selectedItems.forEach(({ item: selectedItem }) => {
+      selectedItem.x = Math.round(selectedItem.x);
+      selectedItem.y = Math.round(selectedItem.y);
+    });
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", end);
+    window.removeEventListener("pointercancel", end);
+    window.removeEventListener("blur", end);
+    renderWorkspace();
+    connectionsLayer.innerHTML = "";
+    renderConnections(project);
+    if (cancelled) return;
+    const commands = [
+      ...selectedItems.map(({ item: selectedItem }, index) =>
+        createHistoryCommand("updateItem", selectedItem.id, beforeItems[index], selectedItem, { projectId: project.id })),
+      ...selectedDrawings.map(({ drawing }, index) =>
+        createHistoryCommand("updateDrawing", drawing.id, beforeDrawings[index], drawing, { projectId: project.id })),
+      ...selectedConnections.map(({ connection }, index) =>
+        createHistoryCommand("updateConnection", connection.id, beforeConnections[index], connection, { projectId: project.id }))
+    ];
+    commitState({
+      historyEntry: createBatchHistoryCommand("moveSelection", commands, {
+        targetId: commands.map((command) => command.targetId).join(",")
+      }),
+      forceStep: true
+    });
+  };
+
+  const pointerCapture = typeof beginConnectionPointerCapture === "function"
+    ? beginConnectionPointerCapture(event, end)
+    : { pointerId: event.pointerId, target: event.currentTarget };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", end);
+  window.addEventListener("pointercancel", end);
+  window.addEventListener("blur", end);
+  return true;
+}
+
 function toggleItemSelection(id) {
-  selectedDrawingIds.clear();
   if (selectedItemIds.has(id)) {
     selectedItemIds.delete(id);
     selectedBoardItemId = [...selectedItemIds][0] || null;
@@ -409,8 +585,8 @@ function toggleItemSelection(id) {
 
 function handleConnectionSelection(event, id) {
   event.stopPropagation();
-  selectedDrawingIds.clear();
   if (event.shiftKey) {
+    selectedBoardItemId = selectedBoardItemId && selectedItemIds.has(selectedBoardItemId) ? selectedBoardItemId : null;
     if (selectedConnectionIds.has(id)) {
       selectedConnectionIds.delete(id);
     } else {
@@ -419,6 +595,7 @@ function handleConnectionSelection(event, id) {
   } else {
     selectedConnectionIds = new Set([id]);
     selectedItemIds.clear();
+    selectedDrawingIds.clear();
     selectedBoardItemId = null;
   }
   renderSelectionClasses();
@@ -431,17 +608,21 @@ function handleDrawingSelection(event, id) {
   event.preventDefault();
   event.stopPropagation();
   if (drawMode) toggleDrawMode();
-  selectedBoardItemId = null;
-  selectedItemIds.clear();
-  selectedConnectionIds.clear();
+  const wasSelected = selectedDrawingIds.has(id);
   if (event.shiftKey) {
+    selectedBoardItemId = selectedBoardItemId && selectedItemIds.has(selectedBoardItemId) ? selectedBoardItemId : null;
     if (selectedDrawingIds.has(id)) {
       selectedDrawingIds.delete(id);
     } else {
       selectedDrawingIds.add(id);
     }
-  } else {
+  } else if (!wasSelected) {
+    selectedBoardItemId = null;
+    selectedItemIds.clear();
+    selectedConnectionIds.clear();
     selectedDrawingIds = new Set([id]);
+  } else {
+    selectedBoardItemId = selectedBoardItemId && selectedItemIds.has(selectedBoardItemId) ? selectedBoardItemId : null;
   }
   renderSelectionClasses();
   renderDrawings(getActiveProject());
@@ -453,16 +634,18 @@ function startDrawingDrag(event, id) {
   const project = getActiveProject();
   if (!project || event.button !== 0) return;
   if (!selectedDrawingIds.has(id)) selectedDrawingIds = new Set([id]);
-  const selectedDrawings = (project.drawings || [])
-    .filter((drawing) => selectedDrawingIds.has(drawing.id))
-    .map((drawing) => ({
-      drawing,
-      points: drawing.points.map((point) => ({ ...point }))
-    }));
+  const selectedItems = project.items
+    .filter((candidate) => selectedItemIds.has(candidate.id))
+    .map((candidate) => ({ item: candidate, x: candidate.x, y: candidate.y }));
+  const beforeItems = selectedItems.map(({ item: selectedItem }) => structuredClone(selectedItem));
+  const selectedDrawings = getSelectedDrawingDragData(project);
   if (!selectedDrawings.length) return;
   const beforeDrawings = selectedDrawings.map(({ drawing }) => structuredClone(drawing));
+  const selectedConnections = getSelectedConnectionDragData(project);
+  const beforeConnections = selectedConnections.map(({ connection }) => structuredClone(connection));
 
   interactionLock = true;
+  board.classList.add("dragging-board");
   const origin = {
     pointerX: event.clientX,
     pointerY: event.clientY
@@ -473,13 +656,25 @@ function startDrawingDrag(event, id) {
     if (!Number.isFinite(moveEvent?.clientX) || !Number.isFinite(moveEvent?.clientY)) return;
     const dx = (moveEvent.clientX - origin.pointerX) / boardZoom;
     const dy = (moveEvent.clientY - origin.pointerY) / boardZoom;
+    selectedItems.forEach(({ item: selectedItem, x, y }) => {
+      selectedItem.x = clamp(x + dx, 0, 6400 - (selectedItem.width || 210));
+      selectedItem.y = clamp(y + dy, 0, 4200 - (selectedItem.height || 140));
+      const selectedElement = board.querySelector(`[data-id="${selectedItem.id}"]`);
+      if (selectedElement) {
+        selectedElement.style.left = `${selectedItem.x}px`;
+        selectedElement.style.top = `${selectedItem.y}px`;
+      }
+    });
     selectedDrawings.forEach(({ drawing, points }) => {
       drawing.points = points.map((point) => ({
         x: Math.round(clamp(point.x + dx, 0, 6400)),
         y: Math.round(clamp(point.y + dy, 0, 4200))
       }));
     });
+    moveSelectedConnections(selectedConnections, dx, dy);
     renderDrawings(project);
+    connectionsLayer.innerHTML = "";
+    renderConnections(project);
   };
 
   let dragEnded = false;
@@ -488,13 +683,24 @@ function startDrawingDrag(event, id) {
     dragEnded = true;
     move(endEvent);
     interactionLock = false;
+    board.classList.remove("dragging-board");
+    selectedItems.forEach(({ item: selectedItem }) => {
+      selectedItem.x = Math.round(selectedItem.x);
+      selectedItem.y = Math.round(selectedItem.y);
+    });
     window.removeEventListener("pointermove", move);
     window.removeEventListener("pointerup", end);
     window.removeEventListener("pointercancel", end);
-    const commands = selectedDrawings.map(({ drawing }, index) =>
-      createHistoryCommand("updateDrawing", drawing.id, beforeDrawings[index], drawing, { projectId: project.id }));
+    const commands = [
+      ...selectedItems.map(({ item: selectedItem }, index) =>
+        createHistoryCommand("updateItem", selectedItem.id, beforeItems[index], selectedItem, { projectId: project.id })),
+      ...selectedDrawings.map(({ drawing }, index) =>
+        createHistoryCommand("updateDrawing", drawing.id, beforeDrawings[index], drawing, { projectId: project.id })),
+      ...selectedConnections.map(({ connection }, index) =>
+        createHistoryCommand("updateConnection", connection.id, beforeConnections[index], connection, { projectId: project.id }))
+    ];
     commitState({
-      historyEntry: createBatchHistoryCommand("moveDrawingSelection", commands, {
+      historyEntry: createBatchHistoryCommand("moveSelection", commands, {
         targetId: commands.map((command) => command.targetId).join(",")
       }),
       forceStep: true
@@ -574,9 +780,10 @@ function handleGlobalKeyup(event) {
   board.classList.remove("space-panning");
 }
 
-function deleteSelection() {
+async function deleteSelection() {
   const project = getActiveProject();
   if (!project || (!selectedItemIds.size && !selectedConnectionIds.size && !selectedDrawingIds.size && !selectedBoardItemId)) return;
+  if (!await confirmDangerousAction("Delete the selected board elements?")) return;
 
   const idsToDelete = new Set(selectedItemIds);
   if (!idsToDelete.size && selectedBoardItemId) idsToDelete.add(selectedBoardItemId);
@@ -673,3 +880,4 @@ function formatHours(value) {
   const rounded = Math.round(value * 10) / 10;
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 }
+

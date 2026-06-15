@@ -226,9 +226,9 @@ async function apiRequest() {
 }
 
 function saveDisplayName() {
-  const value = displayNameInput.value.trim();
+  const value = cleanUserText(displayNameInput.value, 32);
   if (!value) return;
-  currentDisplayName = value.slice(0, 32);
+  currentDisplayName = value;
   localStorage.setItem("flowboard-display-name", currentDisplayName);
   displayNameInput.value = currentDisplayName;
   if (currentUser) currentUser.displayName = currentDisplayName;
@@ -455,20 +455,11 @@ async function acceptWorkspaceInvite(token) {
   const normalizedToken = String(token || "").trim();
   if (!normalizedToken || !currentUser?.id) return null;
   const client = getSupabaseClient();
-  const { data: invite, error } = await client
-    .from("workspace_invites")
-    .select("workspace_id, expires_at")
-    .eq("token", normalizedToken)
-    .maybeSingle();
+  const { data: workspaceId, error } = await client.rpc("accept_workspace_invite", {
+    invite_token: normalizedToken
+  });
   if (error) throw error;
-  if (!invite) return null;
-  if (invite.expires_at && new Date(invite.expires_at).getTime() < Date.now()) return null;
-
-  const { error: memberError } = await client
-    .from("workspace_members")
-    .insert({ workspace_id: invite.workspace_id, user_id: currentUser.id, role: "member" });
-  if (memberError && memberError.code !== "23505") throw memberError;
-  return invite.workspace_id;
+  return workspaceId || null;
 }
 
 async function createInviteLink() {

@@ -48,8 +48,143 @@ function addBoardItem(type, extra = {}, options = {}) {
     }
     render();
   } else {
-    saveAndRender();
+    saveState({ projectId: project.id, forceStep: true });
+    render();
   }
+}
+
+const templateLayouts = {
+  "one-to-three": {
+    label: "1 to 3",
+    nodes: [
+      { key: "root", x: 0, y: 168 },
+      { key: "top", x: 448, y: 0 },
+      { key: "middle", x: 448, y: 168 },
+      { key: "bottom", x: 448, y: 336 }
+    ],
+    links: [
+      { from: "root", to: "top", fromSide: "right", toSide: "left", points: [{ x: 336, y: 224 }, { x: 336, y: 56 }] },
+      { from: "root", to: "middle", fromSide: "right", toSide: "left", points: [] },
+      { from: "root", to: "bottom", fromSide: "right", toSide: "left", points: [{ x: 336, y: 224 }, { x: 336, y: 392 }] }
+    ]
+  },
+  "one-to-six": {
+    label: "1 to 6",
+    nodes: [
+      { key: "center", x: 448, y: 280 },
+      { key: "top", x: 448, y: 0 },
+      { key: "bottom", x: 448, y: 560 },
+      { key: "leftTop", x: 0, y: 112 },
+      { key: "leftBottom", x: 0, y: 448 },
+      { key: "rightTop", x: 896, y: 112 },
+      { key: "rightBottom", x: 896, y: 448 }
+    ],
+    links: [
+      { from: "center", to: "top", fromSide: "top", toSide: "bottom", points: [] },
+      { from: "center", to: "bottom", fromSide: "bottom", toSide: "top", points: [] },
+      { from: "center", to: "leftTop", fromSide: "left", toSide: "right", points: [{ x: 336, y: 336 }, { x: 336, y: 168 }] },
+      { from: "center", to: "leftBottom", fromSide: "left", toSide: "right", points: [{ x: 336, y: 336 }, { x: 336, y: 504 }] },
+      { from: "center", to: "rightTop", fromSide: "right", toSide: "left", points: [{ x: 784, y: 336 }, { x: 784, y: 168 }] },
+      { from: "center", to: "rightBottom", fromSide: "right", toSide: "left", points: [{ x: 784, y: 336 }, { x: 784, y: 504 }] }
+    ]
+  }
+};
+
+const templateBoardSize = { width: 224, height: 112 };
+
+function addTemplateLayout(templateId) {
+  const project = getActiveProject();
+  const template = templateLayouts[templateId];
+  if (!project || !template) return;
+  if (drawMode) toggleDrawMode();
+  setActiveShapeTool(null);
+
+  const origin = getTemplateOrigin(template);
+  const itemsByKey = new Map();
+  const items = template.nodes.map((node) => {
+    const item = createTemplateBoard(node, origin);
+    itemsByKey.set(node.key, item);
+    return item;
+  });
+  const connections = template.links
+    .map((link) => createTemplateConnection(link, itemsByKey, origin))
+    .filter(Boolean);
+
+  project.items.push(...items);
+  project.connections.push(...connections);
+  selectedBoardItemId = items[0]?.id || null;
+  selectedItemIds = new Set(items.map((item) => item.id));
+  selectedConnectionIds = new Set(connections.map((connection) => connection.id));
+  selectedDrawingIds.clear();
+
+  const commands = [
+    ...items.map((item) => createHistoryCommand("createItem", item.id, null, item, { projectId: project.id })),
+    ...connections.map((connection) => createHistoryCommand("createConnection", connection.id, null, connection, { projectId: project.id }))
+  ];
+  commitState({
+    historyEntry: createBatchHistoryCommand("createTemplateLayout", commands, {
+      targetId: commands.map((command) => command.targetId).join(",")
+    }),
+    forceStep: true
+  });
+  render();
+}
+
+function createTemplateBoard(node, origin) {
+  const text = "New board";
+  return {
+    id: crypto.randomUUID(),
+    type: "ticket",
+    x: snapTemplateValue(origin.x + node.x, 0, 6400 - templateBoardSize.width),
+    y: snapTemplateValue(origin.y + node.y, 0, 4200 - templateBoardSize.height),
+    width: templateBoardSize.width,
+    height: templateBoardSize.height,
+    text,
+    html: text,
+    color: getCreationColor(),
+    captionOpen: true
+  };
+}
+
+function createTemplateConnection(link, itemsByKey, origin) {
+  const from = itemsByKey.get(link.from);
+  const to = itemsByKey.get(link.to);
+  if (!from || !to) return null;
+  const connection = createConnection(from.id, to.id, from, to, link.fromSide, link.toSide);
+  connection.snapToGrid = true;
+  connection.manualBend = true;
+  connection.manualPoints = link.points.map((point) => snapConnectionPointToGrid({
+    x: origin.x + point.x,
+    y: origin.y + point.y
+  }));
+  connection.bend = getDefaultConnectionBend(connection, { items: [from, to] });
+  snapConnectionToGrid(connection, { items: [from, to] });
+  return connection;
+}
+
+function getTemplateOrigin(template) {
+  const bounds = template.nodes.reduce((box, node) => ({
+    left: Math.min(box.left, node.x),
+    top: Math.min(box.top, node.y),
+    right: Math.max(box.right, node.x + templateBoardSize.width),
+    bottom: Math.max(box.bottom, node.y + templateBoardSize.height)
+  }), { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity });
+  const rect = board.getBoundingClientRect();
+  const center = {
+    x: (rect.width / 2 - boardPan.x) / boardZoom,
+    y: (rect.height / 2 - boardPan.y) / boardZoom
+  };
+  const width = bounds.right - bounds.left;
+  const height = bounds.bottom - bounds.top;
+  return {
+    x: snapTemplateValue(center.x - width / 2 - bounds.left, 0, 6400 - width),
+    y: snapTemplateValue(center.y - height / 2 - bounds.top, 0, 4200 - height)
+  };
+}
+
+function snapTemplateValue(value, min, max) {
+  const gridSize = typeof BOARD_GRID_SIZE === "number" && BOARD_GRID_SIZE > 0 ? BOARD_GRID_SIZE : 28;
+  return Math.round(clamp(Math.round(value / gridSize) * gridSize, min, max));
 }
 
 function getNewItemPosition(width, height, extra = {}) {
@@ -74,6 +209,7 @@ function getNewItemPosition(width, height, extra = {}) {
 
 const IMPORT_IMAGE_MAX_DIMENSION = 1600;
 const IMPORT_IMAGE_QUALITY = 0.84;
+const IMAGE_STORAGE_BUCKET = "flowboard-images";
 
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -134,6 +270,47 @@ async function prepareImportedImage(file) {
   }
 }
 
+function dataUrlToBlob(dataUrl) {
+  const [header, data] = String(dataUrl).split(",");
+  const mime = header.match(/data:([^;]+)/)?.[1] || "application/octet-stream";
+  const binary = atob(data || "");
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return new Blob([bytes], { type: mime });
+}
+
+function getImageFileExtension(type, fallbackName = "") {
+  const fromName = fallbackName.match(/\.([a-z0-9]{2,5})$/i)?.[1]?.toLowerCase();
+  if (fromName && ["png", "jpg", "jpeg", "webp", "gif", "svg"].includes(fromName)) return fromName;
+  return {
+    "image/png": "png",
+    "image/jpeg": "jpg",
+    "image/webp": "webp",
+    "image/gif": "gif",
+    "image/svg+xml": "svg"
+  }[type] || "jpg";
+}
+
+async function uploadImportedImageToStorage(imported, file) {
+  const client = getSupabaseClient();
+  if (!client || !currentWorkspaceId || !currentUser?.id || !imported?.src?.startsWith("data:image/")) {
+    return null;
+  }
+  const blob = dataUrlToBlob(imported.src);
+  const extension = getImageFileExtension(blob.type, file?.name);
+  const path = `${currentWorkspaceId}/${currentUser.id}/${crypto.randomUUID()}.${extension}`;
+  const { error } = await client.storage
+    .from(IMAGE_STORAGE_BUCKET)
+    .upload(path, blob, {
+      cacheControl: "31536000",
+      contentType: blob.type,
+      upsert: false
+    });
+  if (error) throw error;
+  const { data } = client.storage.from(IMAGE_STORAGE_BUCKET).getPublicUrl(path);
+  return data?.publicUrl || null;
+}
+
 async function addImageFile(file, point = null) {
   if (!file?.type?.startsWith("image/")) {
     window.alert("Choose an image file.");
@@ -141,13 +318,19 @@ async function addImageFile(file, point = null) {
   }
   try {
     const imported = await prepareImportedImage(file);
+    let imageSrc = imported.src;
+    try {
+      imageSrc = await uploadImportedImageToStorage(imported, file) || imported.src;
+    } catch (storageError) {
+      console.warn("FlowBoard image storage upload failed, keeping local image data:", storageError);
+    }
     const placement = point ? {
       x: Math.max(0, Math.round(point.x)),
       y: Math.max(0, Math.round(point.y))
     } : {};
     addBoardItem("image", {
-      src: imported.src,
-      text: file.name || "Image",
+      src: imageSrc,
+      text: cleanUserText(file.name, 80, "Image"),
       width: imported.width,
       height: imported.height,
       ...placement
@@ -270,6 +453,75 @@ function pasteTicket(source, point) {
   render();
 }
 
+function getResizeFrameFromSize(origin, direction, width, height) {
+  let x = origin.itemX;
+  let y = origin.itemY;
+
+  if (direction.includes("w")) {
+    x = origin.itemX + origin.width - width;
+  } else if (!direction.includes("e")) {
+    x = origin.itemX + (origin.width - width) / 2;
+  }
+
+  if (direction.includes("n")) {
+    y = origin.itemY + origin.height - height;
+  } else if (!direction.includes("s")) {
+    y = origin.itemY + (origin.height - height) / 2;
+  }
+
+  return { x, y, width, height };
+}
+
+function getMaxProportionalResizeScale(origin, direction) {
+  const centerX = origin.itemX + origin.width / 2;
+  const centerY = origin.itemY + origin.height / 2;
+  const maxWidth = direction.includes("w")
+    ? origin.itemX + origin.width
+    : direction.includes("e")
+      ? 6400 - origin.itemX
+      : Math.min(centerX * 2, (6400 - centerX) * 2);
+  const maxHeight = direction.includes("n")
+    ? origin.itemY + origin.height
+    : direction.includes("s")
+      ? 4200 - origin.itemY
+      : Math.min(centerY * 2, (4200 - centerY) * 2);
+
+  return Math.max(0.01, Math.min(maxWidth / origin.width, maxHeight / origin.height));
+}
+
+function getProportionalResizeScale(origin, direction, dx, dy) {
+  const hasHorizontalDrag = direction.includes("e") || direction.includes("w");
+  const hasVerticalDrag = direction.includes("n") || direction.includes("s");
+  const scaleX = hasHorizontalDrag
+    ? (origin.width + (direction.includes("e") ? dx : -dx)) / origin.width
+    : 1;
+  const scaleY = hasVerticalDrag
+    ? (origin.height + (direction.includes("s") ? dy : -dy)) / origin.height
+    : 1;
+
+  if (hasHorizontalDrag && hasVerticalDrag) {
+    return Math.abs(scaleX - 1) >= Math.abs(scaleY - 1) ? scaleX : scaleY;
+  }
+  return hasHorizontalDrag ? scaleX : scaleY;
+}
+
+function getProportionalResizeFrame(item, origin, direction, dx, dy) {
+  if (origin.width <= 0 || origin.height <= 0) return null;
+  const maxScale = getMaxProportionalResizeScale(origin, direction);
+  const minSize = getMinimumItemSize(item, origin.width);
+  const minScale = Math.max(minSize.width / origin.width, minSize.height / origin.height);
+  let scale = getProportionalResizeScale(origin, direction, dx, dy);
+  scale = maxScale < minScale ? maxScale : clamp(scale, minScale, maxScale);
+
+  const refinedMinSize = getMinimumItemSize(item, Math.round(origin.width * scale));
+  const refinedMinScale = Math.max(refinedMinSize.width / origin.width, refinedMinSize.height / origin.height);
+  if (refinedMinScale > scale && refinedMinScale <= maxScale) {
+    scale = refinedMinScale;
+  }
+
+  return getResizeFrameFromSize(origin, direction, origin.width * scale, origin.height * scale);
+}
+
 function startItemResize(event, node, item, project, direction = "se") {
   if (event.type === "mousedown" && event.button !== 0) return;
   event.preventDefault();
@@ -311,27 +563,39 @@ function startItemResize(event, node, item, project, direction = "se") {
     let nextWidth = origin.width;
     let nextHeight = origin.height;
 
-    if (direction.includes("e")) nextWidth = origin.width + dx;
-    if (direction.includes("s")) nextHeight = origin.height + dy;
-    if (direction.includes("w")) {
-      nextWidth = origin.width - dx;
-      nextX = origin.itemX + dx;
-    }
-    if (direction.includes("n")) {
-      nextHeight = origin.height - dy;
-      nextY = origin.itemY + dy;
+    const proportionalFrame = moveEvent.shiftKey
+      ? getProportionalResizeFrame(item, origin, direction, dx, dy)
+      : null;
+
+    if (proportionalFrame) {
+      nextX = proportionalFrame.x;
+      nextY = proportionalFrame.y;
+      nextWidth = proportionalFrame.width;
+      nextHeight = proportionalFrame.height;
+    } else {
+      if (direction.includes("e")) nextWidth = origin.width + dx;
+      if (direction.includes("s")) nextHeight = origin.height + dy;
+      if (direction.includes("w")) {
+        nextWidth = origin.width - dx;
+        nextX = origin.itemX + dx;
+      }
+      if (direction.includes("n")) {
+        nextHeight = origin.height - dy;
+        nextY = origin.itemY + dy;
+      }
+
+      const minSize = getMinimumItemSize(item, Math.round(nextWidth));
+      if (nextWidth < minSize.width) {
+        if (direction.includes("w")) nextX -= minSize.width - nextWidth;
+        nextWidth = minSize.width;
+      }
+      if (nextHeight < minSize.height) {
+        if (direction.includes("n")) nextY -= minSize.height - nextHeight;
+        nextHeight = minSize.height;
+      }
     }
 
     const minSize = getMinimumItemSize(item, Math.round(nextWidth));
-    if (nextWidth < minSize.width) {
-      if (direction.includes("w")) nextX -= minSize.width - nextWidth;
-      nextWidth = minSize.width;
-    }
-    if (nextHeight < minSize.height) {
-      if (direction.includes("n")) nextY -= minSize.height - nextHeight;
-      nextHeight = minSize.height;
-    }
-
     item.width = Math.round(clamp(nextWidth, minSize.width, 6400));
     item.height = Math.round(clamp(nextHeight, minSize.height, 4200));
     item.x = Math.round(clamp(nextX, 0, 6400 - item.width));
@@ -387,7 +651,7 @@ function getImageSrcFromHtml(html) {
 }
 
 function isImageLikeUrl(value) {
-  return /^https?:\/\/.+\.(png|jpe?g|gif|webp|avif|svg)(\?.*)?$/i.test(value.trim()) || value.trim().startsWith("data:image/");
+  return /^https:\/\/.+\.(png|jpe?g|gif|webp|avif|svg)(\?.*)?$/i.test(value.trim()) || value.trim().startsWith("data:image/");
 }
 
 function handleBoardWheel(event) {
@@ -464,6 +728,63 @@ function observeItemResize(node, item, project) {
   observer.observe(node);
 }
 
+function initializeSideDrawerResize() {
+  if (!sideDrawer) return;
+  const storageKey = "flowboard-side-drawer-width";
+  const getMaxWidth = () => Math.max(340, window.innerWidth - 58);
+  const clampDrawerWidth = (width) => clamp(Math.round(width), 340, getMaxWidth());
+  const applyWidth = (width) => {
+    const drawerWidth = `${clampDrawerWidth(width)}px`;
+    sideDrawer.style.setProperty("--side-drawer-width", drawerWidth);
+    projectsDrawer?.style.setProperty("--side-drawer-width", drawerWidth);
+    app.style.setProperty("--side-drawer-width", drawerWidth);
+  };
+
+  const savedWidth = Number(localStorage.getItem(storageKey));
+  if (Number.isFinite(savedWidth) && savedWidth > 0) {
+    applyWidth(savedWidth);
+  }
+
+  const startResize = (handle, drawer, event) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = drawer.getBoundingClientRect().width;
+    document.body.classList.add("resizing-side-drawer");
+    handle.setPointerCapture(event.pointerId);
+
+    const move = (moveEvent) => {
+      const nextWidth = startWidth + (startX - moveEvent.clientX);
+      applyWidth(nextWidth);
+    };
+
+    const end = () => {
+      document.body.classList.remove("resizing-side-drawer");
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", end);
+      handle.removeEventListener("pointercancel", end);
+      localStorage.setItem(storageKey, String(clampDrawerWidth(drawer.getBoundingClientRect().width)));
+    };
+
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", end);
+    handle.addEventListener("pointercancel", end);
+  };
+
+  [
+    { handle: sideDrawerResize, drawer: sideDrawer },
+    { handle: workspaceDrawerResize, drawer: projectsDrawer }
+  ].forEach(({ handle, drawer }) => {
+    if (!handle || !drawer) return;
+    handle.addEventListener("pointerdown", (event) => startResize(handle, drawer, event));
+  });
+
+  window.addEventListener("resize", () => {
+    const currentWidth = (app.classList.contains("workspace-open") ? projectsDrawer : sideDrawer).getBoundingClientRect().width;
+    applyWidth(currentWidth);
+  });
+}
+
 function togglePanel(panel, button) {
   const collapsed = panel.classList.toggle("collapsed");
   button.textContent = collapsed ? ">" : "v";
@@ -472,7 +793,27 @@ function togglePanel(panel, button) {
 
 function toggleDrawer(drawer) {
   const className = drawer === "workspace" ? "workspace-open" : "side-open";
-  if (drawer === "workspace") app.classList.remove("side-open");
+  window.clearTimeout(drawerSwitchTimer);
+  app.classList.remove("drawer-switching");
+  pendingDrawerTarget = null;
+  if (app.classList.contains(className)) {
+    app.classList.remove(className);
+    syncDrawerButtons();
+    return;
+  }
+  if (drawer === "workspace" && app.classList.contains("side-open")) {
+    pendingDrawerTarget = "workspace";
+    app.classList.add("drawer-switching");
+    app.classList.remove("side-open");
+    syncDrawerButtons();
+    drawerSwitchTimer = window.setTimeout(() => {
+      pendingDrawerTarget = null;
+      app.classList.add("workspace-open");
+      syncDrawerButtons();
+      requestAnimationFrame(() => app.classList.remove("drawer-switching"));
+    }, DRAWER_SWITCH_MS);
+    return;
+  }
   app.classList.toggle(className);
   syncDrawerButtons();
 }
@@ -483,20 +824,23 @@ function closeDrawer(drawer) {
 }
 
 function syncDrawerButtons() {
-  const workspaceOpen = app.classList.contains("workspace-open");
-  const sideOpen = app.classList.contains("side-open");
+  const actualWorkspaceOpen = app.classList.contains("workspace-open");
+  const actualSideOpen = app.classList.contains("side-open");
+  const workspaceOpen = actualWorkspaceOpen || pendingDrawerTarget === "workspace";
+  const sideOpen = actualSideOpen || Boolean(pendingDrawerTarget && pendingDrawerTarget !== "workspace");
+  const targetSidePanel = pendingDrawerTarget && pendingDrawerTarget !== "workspace" ? pendingDrawerTarget : activeSidePanel;
   workspaceDrawerToggle.setAttribute("aria-expanded", String(workspaceOpen));
-  hoursDrawerToggle.setAttribute("aria-expanded", String(sideOpen && activeSidePanel === "hours"));
-  tasksDrawerToggle.setAttribute("aria-expanded", String(sideOpen && activeSidePanel === "tasks"));
-  storyDrawerToggle.setAttribute("aria-expanded", String(sideOpen && activeSidePanel === "story"));
-  teamDrawerToggle.setAttribute("aria-expanded", String(sideOpen && activeSidePanel === "team"));
+  hoursDrawerToggle.setAttribute("aria-expanded", String(sideOpen && targetSidePanel === "hours"));
+  tasksDrawerToggle.setAttribute("aria-expanded", String(sideOpen && targetSidePanel === "tasks"));
+  storyDrawerToggle.setAttribute("aria-expanded", String(sideOpen && targetSidePanel === "story"));
+  teamDrawerToggle.setAttribute("aria-expanded", String(sideOpen && targetSidePanel === "team"));
   workspaceDrawerToggle.classList.toggle("active", workspaceOpen);
-  hoursDrawerToggle.classList.toggle("active", sideOpen && activeSidePanel === "hours");
-  tasksDrawerToggle.classList.toggle("active", sideOpen && activeSidePanel === "tasks");
-  storyDrawerToggle.classList.toggle("active", sideOpen && activeSidePanel === "story");
-  teamDrawerToggle.classList.toggle("active", sideOpen && activeSidePanel === "team");
-  projectsDrawer.setAttribute("aria-hidden", String(!workspaceOpen));
-  sideDrawer.setAttribute("aria-hidden", String(!sideOpen));
+  hoursDrawerToggle.classList.toggle("active", sideOpen && targetSidePanel === "hours");
+  tasksDrawerToggle.classList.toggle("active", sideOpen && targetSidePanel === "tasks");
+  storyDrawerToggle.classList.toggle("active", sideOpen && targetSidePanel === "story");
+  teamDrawerToggle.classList.toggle("active", sideOpen && targetSidePanel === "team");
+  projectsDrawer.setAttribute("aria-hidden", String(!actualWorkspaceOpen));
+  sideDrawer.setAttribute("aria-hidden", String(!actualSideOpen));
 }
 
 function toggleSidePanel(panelName) {
@@ -505,6 +849,25 @@ function toggleSidePanel(panelName) {
     closeDrawer("side");
     return;
   }
+  window.clearTimeout(drawerSwitchTimer);
+  app.classList.remove("drawer-switching");
+  pendingDrawerTarget = null;
+  if (sideOpen || app.classList.contains("workspace-open")) {
+    pendingDrawerTarget = panelName;
+    app.classList.add("drawer-switching");
+    app.classList.remove("side-open", "workspace-open");
+    syncDrawerButtons();
+    drawerSwitchTimer = window.setTimeout(() => {
+      pendingDrawerTarget = null;
+      openSidePanel(panelName);
+      requestAnimationFrame(() => app.classList.remove("drawer-switching"));
+    }, DRAWER_SWITCH_MS);
+    return;
+  }
+  openSidePanel(panelName);
+}
+
+function openSidePanel(panelName) {
   activeSidePanel = panelName;
   sideDrawer.dataset.mode = panelName;
   setPanelOpen(hoursPanel, toggleHours, panelName === "hours");

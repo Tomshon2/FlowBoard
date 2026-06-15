@@ -18,6 +18,7 @@ const cursorColors = ["#126c83", "#d94a2b", "#8f2bd5", "#03943a", "#e5549f", "#2
 const clientId = sessionStorage.getItem("flowboard-client-id") || crypto.randomUUID();
 sessionStorage.setItem("flowboard-client-id", clientId);
 let currentDisplayName = localStorage.getItem("flowboard-display-name") || "";
+let personalTheme = loadPersonalTheme();
 let cursorChannelReady = false;
 let cursorSendTimer = null;
 let pendingCursorPoint = null;
@@ -31,6 +32,29 @@ const ticketColors = [
 const DEFAULT_CONNECTION_COLOR = "#172033";
 const DEFAULT_CONNECTION_THICKNESS = 3;
 const DEFAULT_DRAWING_THICKNESS = 4;
+const BOARD_GRID_SIZE = 28;
+
+function getPersonalThemeKey() {
+  const userKey = currentUser?.id || currentUser?.email || currentDisplayName || "local";
+  return `flowboard-ui-theme:${userKey}`;
+}
+
+function loadPersonalTheme() {
+  return localStorage.getItem(getPersonalThemeKey()) === "dark" ? "dark" : "light";
+}
+
+function setPersonalTheme(theme) {
+  personalTheme = theme === "dark" ? "dark" : "light";
+  localStorage.setItem(getPersonalThemeKey(), personalTheme);
+}
+
+function createDefaultTaskColumns() {
+  return [
+    { id: "todo", title: "To do", color: "#03943a", order: 0 },
+    { id: "in-progress", title: "In progress", color: "#b77900", order: 1 },
+    { id: "done", title: "Done", color: "#6d28d9", order: 2 }
+  ].map((column) => ({ ...column }));
+}
 
 const timePlan = [
   {
@@ -93,19 +117,37 @@ const timePlan = [
   }
 ];
 
+function createDefaultHourPlan() {
+  return timePlan.map((phase, phaseIndex) => ({
+    id: crypto.randomUUID(),
+    title: phase.title,
+    percent: phase.percent,
+    order: phaseIndex,
+    tasks: phase.tasks.map((task, taskIndex) => ({
+      id: crypto.randomUUID(),
+      title: task.title,
+      percent: task.percent,
+      order: taskIndex
+    }))
+  }));
+}
+
 const defaultState = {
   activeProjectId: "project-1",
   boardTheme: "light",
+  boardGrid: "visible",
   updatedAt: 0,
   projects: [
     {
       id: "project-1",
       name: "Example project",
       totalHours: 40,
+      hourPlan: createDefaultHourPlan(),
       tasks: [
-        { id: "task-1", title: "Define sprint goal", done: false },
-        { id: "task-2", title: "Review images and references", done: true }
+        { id: "task-1", title: "Define sprint goal", columnId: "todo", done: false, order: 0 },
+        { id: "task-2", title: "Review images and references", columnId: "done", done: true, order: 0 }
       ],
+      taskColumns: createDefaultTaskColumns(),
       story: [
         { id: "story-1", title: "Premise", notes: "What is the game about?", children: [] }
       ],
@@ -176,14 +218,20 @@ const imageInput = document.querySelector("#image-input");
 const drawTool = document.querySelector("#draw-tool");
 const createColor = document.querySelector("#create-color");
 const shapeTools = document.querySelectorAll("[data-shape-tool]");
+const templateSelect = document.querySelector("#template-select");
+const boardGridBtn = document.querySelector("#board-grid-btn");
 const boardThemeBtn = document.querySelector("#board-theme-btn");
 const projectHours = document.querySelector("#project-hours");
 const hoursTotalLabel = document.querySelector("#hours-total-label");
 const hoursTable = document.querySelector("#hours-table");
+const hoursFinalMode = document.querySelector("#hours-final-mode");
+const hoursEditMode = document.querySelector("#hours-edit-mode");
 const connectionStylePanel = document.querySelector("#connection-style-panel");
 const connectionColor = document.querySelector("#connection-color");
 const connectionThickness = document.querySelector("#connection-thickness");
 const connectionThicknessLabel = document.querySelector("#connection-thickness-label");
+const connectionSnapRow = document.querySelector("#connection-snap-row");
+const connectionSnapGrid = document.querySelector("#connection-snap-grid");
 const propertiesPanel = document.querySelector("#properties-panel");
 const propertiesTitle = document.querySelector("#properties-title");
 const boardProperties = document.querySelector("#board-properties");
@@ -200,6 +248,8 @@ const propertiesUnderline = document.querySelector("#properties-underline");
 const propertiesLineColor = document.querySelector("#properties-line-color");
 const propertiesLineThickness = document.querySelector("#properties-line-thickness");
 const propertiesLineThicknessLabel = document.querySelector("#properties-line-thickness-label");
+const propertiesLineSnapRow = document.querySelector("#properties-line-snap-row");
+const propertiesLineSnapGrid = document.querySelector("#properties-line-snap-grid");
 const hoursPanel = document.querySelector("#hours-panel");
 const tasksPanel = document.querySelector("#tasks-panel");
 const storyPanel = document.querySelector("#story-panel");
@@ -223,6 +273,8 @@ const copyInviteBtn = document.querySelector("#copy-invite-btn");
 const inviteStatus = document.querySelector("#invite-status");
 const projectsDrawer = document.querySelector("#projects-drawer");
 const sideDrawer = document.querySelector("#side-drawer");
+const sideDrawerResize = document.querySelector("#side-drawer-resize");
+const workspaceDrawerResize = document.querySelector("#workspace-drawer-resize");
 const storyRootForm = document.querySelector("#story-root-form");
 const storyRootTitle = document.querySelector("#story-root-title");
 const storyTree = document.querySelector("#story-tree");
@@ -233,14 +285,19 @@ const teamMemberRole = document.querySelector("#team-member-role");
 const teamRoleList = document.querySelector("#team-role-list");
 const teamCount = document.querySelector("#team-count");
 let activeSidePanel = "hours";
+let drawerSwitchTimer = null;
+let pendingDrawerTarget = null;
+const DRAWER_SWITCH_MS = 500;
 let authMode = "login";
 let eventListenersReady = false;
+let hoursMode = localStorage.getItem("flowboard-hours-mode") === "edit" ? "edit" : "final";
 sideDrawer.dataset.mode = activeSidePanel;
 displayNameInput.value = currentDisplayName;
 
 function setupEventListeners() {
 if (eventListenersReady) return;
 eventListenersReady = true;
+initializeSideDrawerResize();
 displayNameInput.addEventListener("change", () => saveDisplayName());
 
 loginForm.addEventListener("submit", (event) => {
@@ -267,13 +324,17 @@ copyInviteBtn.addEventListener("click", () => copyInviteLink());
 
 projectForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  const name = projectName.value.trim();
+  const name = cleanUserText(projectName.value, 80);
   if (!name) return;
   const project = {
     id: crypto.randomUUID(),
     name,
+    favorite: false,
+    modifiedAt: Date.now(),
     totalHours: 40,
+    hourPlan: createDefaultHourPlan(),
     tasks: [],
+    taskColumns: createDefaultTaskColumns(),
     story: [],
     teamRoles: [],
     items: [],
@@ -295,6 +356,12 @@ drawTool.addEventListener("click", () => {
   setActiveShapeTool(null);
   toggleDrawMode();
 });
+templateSelect.addEventListener("change", (event) => {
+  const templateId = event.target.value;
+  if (templateId) addTemplateLayout(templateId);
+  event.target.value = "";
+});
+boardGridBtn.addEventListener("click", () => toggleBoardGrid());
 boardThemeBtn.addEventListener("click", () => toggleBoardTheme());
 createColor.addEventListener("input", (event) => {
   createColor.value = normalizeHexColor(event.target.value, ticketColors[0]);
@@ -303,6 +370,7 @@ createColor.addEventListener("input", (event) => {
 connectionStylePanel.addEventListener("pointerdown", (event) => event.stopPropagation());
 connectionColor.addEventListener("input", (event) => updateSelectedConnections({ color: event.target.value }));
 connectionThickness.addEventListener("input", (event) => updateSelectedConnections({ thickness: Number(event.target.value) }));
+connectionSnapGrid.addEventListener("change", (event) => updateSelectedConnections({ snapToGrid: event.target.checked }));
 propertiesPanel.addEventListener("pointerdown", (event) => event.stopPropagation());
 propertiesBoardColor.addEventListener("input", (event) => updateSelectedBoardColor(event.target.value));
 propertiesBoardHex.addEventListener("input", (event) => updateSelectedBoardColor(normalizeHexInput(event.target.value)));
@@ -315,6 +383,7 @@ propertiesItalic.addEventListener("click", () => toggleSelectedBoardTextStyle("i
 propertiesUnderline.addEventListener("click", () => toggleSelectedBoardTextStyle("underline"));
 propertiesLineColor.addEventListener("input", (event) => updateSelectedConnections({ color: event.target.value }));
 propertiesLineThickness.addEventListener("input", (event) => updateSelectedConnections({ thickness: Number(event.target.value) }));
+propertiesLineSnapGrid.addEventListener("change", (event) => updateSelectedConnections({ snapToGrid: event.target.checked }));
 
 imageInput.addEventListener("change", (event) => {
   const file = event.target.files[0];
@@ -350,6 +419,8 @@ document.addEventListener("keydown", (event) => handleGlobalKeydown(event));
 document.addEventListener("keyup", (event) => handleGlobalKeyup(event));
 
 document.querySelector("#save-hours-btn").addEventListener("click", () => saveProjectHours());
+hoursFinalMode.addEventListener("click", () => setHoursMode("final"));
+hoursEditMode.addEventListener("click", () => setHoursMode("edit"));
 projectHours.addEventListener("change", () => saveProjectHours());
 toggleHours.addEventListener("click", () => togglePanel(hoursPanel, toggleHours));
 toggleTasks.addEventListener("click", () => togglePanel(tasksPanel, toggleTasks));
@@ -378,24 +449,10 @@ teamRoleForm.addEventListener("submit", (event) => {
 
 taskForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  const project = getActiveProject();
   const title = taskTitle.value.trim();
-  if (!project || !title) return;
-  const beforeTasks = structuredClone(project.tasks);
-  project.tasks.push({ id: crypto.randomUUID(), title, done: false });
-  const afterTasks = structuredClone(project.tasks);
+  if (!title) return;
+  addTaskColumn(title);
   taskTitle.value = "";
-  saveState({
-    historyEntry: createHistoryCommand(
-      "updateProject",
-      project.id,
-      { tasks: beforeTasks },
-      { tasks: afterTasks },
-      { projectId: project.id, groupKey: `project:${project.id}:tasks` }
-    ),
-    forceStep: true
-  });
-  render();
 });
 }
 
