@@ -952,16 +952,17 @@ function reorderTasksInColumn(project, columnId) {
 
 function renderHours() {
   const project = getActiveProject();
+  const effectiveHoursMode = isGameJamProject(project) ? "final" : hoursMode;
   const totalHours = Number(project?.totalHours || 0);
   projectHours.value = totalHours;
   hoursTotalLabel.textContent = `${formatHours(totalHours)}h`;
   hoursTable.innerHTML = "";
-  hoursFinalMode.classList.toggle("active", hoursMode === "final");
-  hoursEditMode.classList.toggle("active", hoursMode === "edit");
+  hoursFinalMode.classList.toggle("active", effectiveHoursMode === "final");
+  hoursEditMode.classList.toggle("active", effectiveHoursMode === "edit");
   if (!project) return;
 
   normalizeHourPlan(project);
-  if (hoursMode === "final") {
+  if (effectiveHoursMode === "final") {
     renderFinalHours(project, totalHours);
     return;
   }
@@ -1077,6 +1078,7 @@ function renderEditableHours(project, totalHours) {
 }
 
 function setHoursMode(mode) {
+  if (isGameJamProject()) mode = "final";
   hoursMode = mode === "edit" ? "edit" : "final";
   localStorage.setItem("flowboard-hours-mode", hoursMode);
   renderHours();
@@ -1140,6 +1142,9 @@ function startHourPhaseDrag(event, phaseId) {
     if (order.join(",") === beforeOrder) return;
     const phaseById = new Map(project.hourPlan.map((phase) => [phase.id, phase]));
     project.hourPlan = order.map((id) => phaseById.get(id)).filter(Boolean);
+    project.hourPlan.forEach((phase, index) => {
+      phase.order = index;
+    });
     saveHourPlanChange(project, before, `project:${project.id}:hour-plan`);
   };
 
@@ -1209,6 +1214,9 @@ function startHourTaskDrag(event, phaseId, taskId) {
     if (order.join(",") === beforeOrder) return;
     const tasksById = new Map(phase.tasks.map((task) => [task.id, task]));
     phase.tasks = order.map((id) => tasksById.get(id)).filter(Boolean);
+    phase.tasks.forEach((task, index) => {
+      task.order = index;
+    });
     saveHourPlanChange(project, before, `project:${project.id}:hour-phase:${phaseId}:tasks`);
   };
 

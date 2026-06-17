@@ -25,34 +25,8 @@ async function deleteProject(id) {
   if (project && !await confirmDangerousAction(`Delete project "${project.name}"? This cannot be undone.`)) return;
   const beforeSnapshot = getHistorySnapshot();
   state.projects = state.projects.filter((project) => project.id !== id);
-  if (!state.projects.length) {
-    const newProject = {
-      id: crypto.randomUUID(),
-      name: "New project",
-      favorite: false,
-      modifiedAt: Date.now(),
-      totalHours: 40,
-      hourPlan: createDefaultHourPlan(),
-      tasks: [],
-      taskColumns: createDefaultTaskColumns(),
-      milestones: createDefaultMilestones(),
-      history: [{
-        id: crypto.randomUUID(),
-        user: getCurrentEventUser(),
-        action: "Project created",
-        target: "New project",
-        targetId: "",
-        at: new Date().toISOString()
-      }],
-      story: [],
-      teamRoles: [],
-      items: [],
-      connections: []
-    };
-    state.projects.push(newProject);
-  }
   if (state.activeProjectId === id) {
-    state.activeProjectId = state.projects[0].id;
+    state.activeProjectId = state.projects[0]?.id || null;
   }
   selectedBoardItemId = null;
   selectedItemIds.clear();
@@ -86,6 +60,7 @@ function finishRenameProject(id, value) {
 
 function startNewConnectionDrag(event, fromId, fromSide) {
   if (event.button !== 0) return;
+  if (spacePressed) return;
   const project = getActiveProject();
   const from = project?.items.find((item) => item.id === fromId);
   if (!project || !from) return;
@@ -296,6 +271,7 @@ function createConnection(fromId, toId, from, to, forcedFromSide, forcedToSide) 
 }
 
 function startDrag(event, id) {
+  if (spacePressed) return;
   const project = getActiveProject();
   const item = project?.items.find((candidate) => candidate.id === id);
   const element = board.querySelector(`[data-id="${id}"]`);
@@ -606,6 +582,7 @@ function toggleItemSelection(id) {
     selectedItemIds.add(id);
     selectedBoardItemId = id;
   }
+  closeDrawersForBoardSelection();
   renderSelectionClasses();
   renderPropertiesPanel();
 }
@@ -625,6 +602,7 @@ function handleConnectionSelection(event, id) {
     selectedDrawingIds.clear();
     selectedBoardItemId = null;
   }
+  closeDrawersForBoardSelection();
   renderSelectionClasses();
   connectionsLayer.innerHTML = "";
   renderConnections(getActiveProject());
@@ -651,6 +629,7 @@ function handleDrawingSelection(event, id) {
   } else {
     selectedBoardItemId = selectedBoardItemId && selectedItemIds.has(selectedBoardItemId) ? selectedBoardItemId : null;
   }
+  closeDrawersForBoardSelection();
   renderSelectionClasses();
   renderDrawings(getActiveProject());
   renderPropertiesPanel();

@@ -138,8 +138,10 @@ function normalizeState() {
   state.boardTheme = state.boardTheme === "dark" ? "dark" : "light";
   state.boardGrid = state.boardGrid === "hidden" ? "hidden" : "visible";
   state.updatedAt = Number(state.updatedAt) || 0;
+  state.projects = Array.isArray(state.projects) ? state.projects : [];
   latestLocalStateStamp = Math.max(latestLocalStateStamp, state.updatedAt);
   state.projects.forEach((project) => {
+    project.kind = project.kind === PROJECT_KIND_GAMEJAM ? PROJECT_KIND_GAMEJAM : PROJECT_KIND_GAMEDEV;
     project.favorite = Boolean(project.favorite);
     project.modifiedAt = Number(project.modifiedAt) || Number(state.updatedAt) || 0;
     project.totalHours ??= project.timerMinutes ? project.timerMinutes / 60 : 40;
@@ -218,6 +220,9 @@ function normalizeState() {
       height: item.height || (item.type === "image" ? 220 : item.type === "shape" ? 140 : 140)
     }));
   });
+  if (!state.projects.some((project) => project.id === state.activeProjectId)) {
+    state.activeProjectId = state.projects[0]?.id || null;
+  }
 }
 
 function saveState(options = {}) {

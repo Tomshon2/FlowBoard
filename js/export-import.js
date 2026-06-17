@@ -192,23 +192,7 @@ function getExportShapeMarkup(item, x, y, width, height) {
   const fill = escapeHtml(item.color || "#fff1b8");
   const stroke = escapeHtml(item.borderColor || "#1f2937");
   const strokeWidth = clamp(Number(item.borderThickness ?? 2) || 0, 0, 14);
-  const cx = x + width / 2;
-  const cy = y + height / 2;
-  if (item.shape === "triangle") {
-    return `<polygon points="${svgPoints([{ x: cx, y }, { x: x + width, y: y + height }, { x, y: y + height }])}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}" />`;
-  }
-  if (item.shape === "hexagon") {
-    const inset = width * 0.25;
-    return `<polygon points="${svgPoints([
-      { x: x + inset, y },
-      { x: x + width - inset, y },
-      { x: x + width, y: cy },
-      { x: x + width - inset, y: y + height },
-      { x: x + inset, y: y + height },
-      { x, y: cy }
-    ])}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}" />`;
-  }
-  return `<ellipse cx="${cx}" cy="${cy}" rx="${width / 2}" ry="${height / 2}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}" />`;
+  return `<svg x="${x}" y="${y}" width="${width}" height="${height}" viewBox="0 0 100 100" preserveAspectRatio="none">${getShapeSvgMarkup(item.shape || "circle", fill, stroke, strokeWidth)}</svg>`;
 }
 
 function getExportTextAnchor(item) {

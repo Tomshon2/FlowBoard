@@ -1,12 +1,24 @@
 ﻿function setActiveShapeTool(tool) {
+  if (tool && !isShapeToolAllowedForProject(tool)) tool = null;
   activeShapeTool = tool;
   shapeTools.forEach((button) => button.classList.toggle("active", button.dataset.shapeTool === activeShapeTool));
+  shapeMenuToggle?.classList.toggle("active", Boolean(activeShapeTool));
+  shapeMenuToggle?.setAttribute("aria-label", activeShapeTool ? `Selected shape: ${getShapeToolLabel(activeShapeTool)}` : "Choose shape");
   board.classList.toggle("shape-placement-mode", Boolean(activeShapeTool));
   if (activeShapeTool) clearSelection();
 }
 
+function setShapeMenuOpen(open) {
+  shapeMenu?.classList.toggle("hidden", !open);
+  shapeMenuToggle?.setAttribute("aria-expanded", String(open));
+}
+
 function startShapePlacement(event) {
   if (!activeShapeTool || event.button !== 0 || event.shiftKey || spacePressed) return;
+  if (!isShapeToolAllowedForProject(activeShapeTool)) {
+    setActiveShapeTool(null);
+    return;
+  }
   if (event.target.closest("button, input, select, textarea, [contenteditable='true'], .resize-handle, .resize-edge, .connection-dot, .connection-handle, .connection-endpoint, .board-item, .drawing-stroke, .connection-line")) return;
   const project = getActiveProject();
   if (!project) return;
@@ -43,21 +55,20 @@ function startShapePlacement(event) {
 
 function createShapePlacementPreview(tool) {
   const preview = document.createElement("div");
-  preview.className = `shape-placement-preview ${tool === "ticket" ? "ticket-preview" : "shape-preview shape-${tool}"}`;
+  preview.className = `shape-placement-preview ${tool === "ticket" ? "ticket-preview" : tool === "table" || tool === "folder" ? `${tool}-preview` : `shape-preview shape-${tool}`}`;
   preview.style.setProperty("--shape-color", tool === "ticket" ? getCreationColor() : getCreationColor());
-  if (tool !== "ticket") {
-    const visual = document.createElement("div");
-    visual.className = `shape-visual shape-${tool}`;
-    visual.style.setProperty("--shape-color", getCreationColor());
-    preview.append(visual);
+  if (tool === "table" || tool === "folder") {
+    preview.append(createTablePreview(tool));
+  } else if (tool !== "ticket") {
+    preview.append(createShapeVisual(tool, getCreationColor()));
   }
   return preview;
 }
 
 function createItemFromPlacement(tool, bounds) {
   const placementBounds = bounds;
-  const minWidth = tool === "ticket" ? 130 : tool === "triangle" ? 96 : 90;
-  const minHeight = tool === "ticket" ? 90 : 86;
+  const minWidth = tool === "ticket" ? 130 : tool === "table" || tool === "folder" ? 180 : tool === "triangle" ? 96 : 90;
+  const minHeight = tool === "ticket" ? 90 : tool === "table" || tool === "folder" ? 120 : 86;
   const width = Math.max(minWidth, Math.round(placementBounds.right - placementBounds.left));
   const height = Math.max(minHeight, Math.round(placementBounds.bottom - placementBounds.top));
   const x = Math.round(clamp(placementBounds.left, 0, 6400 - width));
@@ -65,6 +76,20 @@ function createItemFromPlacement(tool, bounds) {
 
   if (tool === "ticket") {
     addBoardItem("ticket", { x, y, width, height }, { forceHistoryStep: true });
+    return;
+  }
+
+  if (tool === "table" || tool === "folder") {
+    addBoardItem("table", {
+      ...createTableItemDefaults(tool),
+      x,
+      y,
+      width,
+      height,
+      color: getCreationColor(),
+      borderColor: "#1d2733",
+      borderThickness: 2
+    }, { forceHistoryStep: true });
     return;
   }
 
@@ -81,6 +106,32 @@ function createItemFromPlacement(tool, bounds) {
     borderColor: "#1d2733",
     borderThickness: 2
   }, { forceHistoryStep: true });
+}
+
+function createTablePreview(tool) {
+  const previewTable = document.createElement("div");
+  previewTable.className = `table-preview-grid ${tool === "folder" ? "folder-preview-grid" : ""}`;
+  const rows = tool === "folder" ? 2 : 3;
+  const cols = tool === "folder" ? 1 : 3;
+  previewTable.style.setProperty("--table-rows", String(rows));
+  previewTable.style.setProperty("--table-cols", String(cols));
+  for (let index = 0; index < rows * cols; index += 1) {
+    previewTable.append(document.createElement("span"));
+  }
+  return previewTable;
+}
+
+function createTableItemDefaults(kind = "table") {
+  const rows = kind === "folder" ? 2 : 3;
+  const cols = kind === "folder" ? 1 : 3;
+  return {
+    tableKind: kind,
+    table: {
+      rows,
+      cols,
+      cells: Array.from({ length: rows * cols }, () => ({ text: "" }))
+    }
+  };
 }
 
 function startAreaSelection(event) {
@@ -352,11 +403,11 @@ function renderConnections(project) {
     const connectionThicknessValue = Number(connection.thickness) || DEFAULT_CONNECTION_THICKNESS;
     const borderThickness = clamp(Number(connection.borderThickness ?? 2) || 0, 0, 10);
     const borderColor = normalizeHexColor(connection.borderColor || "#ffffff", "#ffffff");
-    const markerId = ensureArrowMarker(`arrow-head-${connection.id}`, connectionColorValue);
+    const markerId = ensureArrowMarker(`arrow-head-${connection.id}`, connectionColorValue, borderColor, borderThickness);
     const route = getConnectionRoute(connection, from, to, project);
     if (borderThickness > 0) {
       const borderPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
-      borderPath.setAttribute("d", route.path);
+      borderPath.setAttribute("d", getConnectionBorderPath(connection, route));
       borderPath.setAttribute("class", "connection-border");
       borderPath.dataset.id = connection.id;
       borderPath.style.stroke = borderColor;
@@ -453,7 +504,7 @@ function updateRenderedConnection(project, connection) {
 
   const route = getConnectionRoute(connection, from, to, project);
   const borderLine = findConnectionSvgNode(".connection-border", connection.id);
-  if (borderLine) borderLine.setAttribute("d", route.path);
+  if (borderLine) borderLine.setAttribute("d", getConnectionBorderPath(connection, route));
   const line = findConnectionSvgNode(".connection-line", connection.id);
   if (line) line.setAttribute("d", route.path);
   setConnectionCirclePosition(findConnectionSvgNode(".from-endpoint", connection.id), route.start);
@@ -496,28 +547,64 @@ function isSameConnectionPointer(event, pointerId) {
   return pointerId === undefined || event.pointerId === undefined || event.pointerId === pointerId;
 }
 
-function ensureArrowMarker(id = "arrow-head", color = DEFAULT_CONNECTION_COLOR) {
+function ensureArrowMarker(id = "arrow-head", color = DEFAULT_CONNECTION_COLOR, borderColor = "", borderThickness = 0) {
+  const outlineWidth = borderThickness > 0 ? clamp(Number(borderThickness) * 1.15, 1.2, 4.5) : 0;
   const existingMarker = document.getElementById(id);
   if (existingMarker) {
-    existingMarker.querySelector("path")?.setAttribute("fill", color);
+    const arrow = existingMarker.querySelector("path");
+    arrow?.setAttribute("fill", color);
+    arrow?.setAttribute("stroke", outlineWidth ? borderColor : "none");
+    arrow?.setAttribute("stroke-width", String(outlineWidth));
     return id;
   }
   const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
   const marker = document.createElementNS("http://www.w3.org/2000/svg", "marker");
   marker.setAttribute("id", id);
-  marker.setAttribute("viewBox", "0 0 10 10");
-  marker.setAttribute("refX", "9");
+  marker.setAttribute("viewBox", "-3 -3 16 16");
+  marker.setAttribute("refX", "10");
   marker.setAttribute("refY", "5");
-  marker.setAttribute("markerWidth", "7");
-  marker.setAttribute("markerHeight", "7");
+  marker.setAttribute("markerWidth", "8.5");
+  marker.setAttribute("markerHeight", "8.5");
   marker.setAttribute("orient", "auto-start-reverse");
+  marker.setAttribute("overflow", "visible");
   const arrow = document.createElementNS("http://www.w3.org/2000/svg", "path");
   arrow.setAttribute("d", "M 0 0 L 10 5 L 0 10 z");
   arrow.setAttribute("fill", color);
+  arrow.setAttribute("stroke", outlineWidth ? borderColor : "none");
+  arrow.setAttribute("stroke-width", String(outlineWidth));
+  arrow.setAttribute("stroke-linejoin", "round");
+  arrow.setAttribute("paint-order", "stroke fill");
   marker.append(arrow);
   defs.append(marker);
   connectionsLayer.append(defs);
   return id;
+}
+
+function getConnectionBorderPath(connection, route) {
+  const thickness = Number(connection.thickness) || DEFAULT_CONNECTION_THICKNESS;
+  return pointsToPath(trimPolylineEnd(route.points || [], Math.max(12, thickness * 4.2)));
+}
+
+function trimPolylineEnd(points = [], distance = 0) {
+  if (points.length < 2 || distance <= 0) return points;
+  const trimmed = points.map((point) => ({ ...point }));
+  let remaining = distance;
+  for (let index = trimmed.length - 1; index > 0; index -= 1) {
+    const end = trimmed[index];
+    const start = trimmed[index - 1];
+    const length = Math.hypot(end.x - start.x, end.y - start.y);
+    if (!length) continue;
+    if (length > remaining) {
+      const ratio = (length - remaining) / length;
+      trimmed[index] = {
+        x: Math.round(start.x + (end.x - start.x) * ratio),
+        y: Math.round(start.y + (end.y - start.y) * ratio)
+      };
+      return trimmed.slice(0, index + 1);
+    }
+    remaining -= length;
+  }
+  return trimmed.slice(0, 1);
 }
 
 function getConnectionRoute(connection, from, to, project) {

@@ -45,7 +45,7 @@
     </div>
 
     <main id="app" class="app hidden">
-      <div class="right-drawer-toggles">
+      <div class="left-drawer-toggles">
         <button id="workspace-drawer-toggle" class="drawer-toggle drawer-toggle-left" type="button" aria-expanded="false" aria-controls="projects-drawer" title="FlowBoard">
           <span class="toggle-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2h6.5A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5Z"/><path d="M3 10h18"/></svg>
@@ -64,6 +64,16 @@
         <button id="story-drawer-toggle" class="drawer-toggle drawer-toggle-right" type="button" aria-expanded="false" aria-controls="side-drawer" title="Game story">
           <span class="toggle-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24"><path d="M5 5.5A2.5 2.5 0 0 1 7.5 3H20v16H7.5A2.5 2.5 0 0 0 5 21Z"/><path d="M5 5.5V21"/><path d="M9 7h7"/><path d="M9 11h6"/></svg>
+          </span>
+        </button>
+        <button id="level-design-drawer-toggle" class="drawer-toggle drawer-toggle-right" type="button" aria-expanded="false" aria-controls="side-drawer" title="Level design">
+          <span class="toggle-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M4 19V5l7-2 6 2 3-1v14l-7 3-6-2Z"/><path d="M11 3v16"/><path d="M17 5v15"/><path d="M8 9h2"/><path d="M14 13h2"/></svg>
+          </span>
+        </button>
+        <button id="character-design-drawer-toggle" class="drawer-toggle drawer-toggle-right" type="button" aria-expanded="false" aria-controls="side-drawer" title="Character design">
+          <span class="toggle-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="7" r="3"/><path d="M6 21v-2a6 6 0 0 1 12 0v2"/><path d="M9 11h6"/><path d="M8 15h8"/></svg>
           </span>
         </button>
         <button id="team-drawer-toggle" class="drawer-toggle drawer-toggle-right" type="button" aria-expanded="false" aria-controls="side-drawer" title="Team roles">
@@ -109,6 +119,10 @@
 
         <form id="project-form" class="compact-form">
           <input id="project-name" type="text" placeholder="New project" />
+          <select id="project-kind" aria-label="Project type">
+            <option value="gamedev">Game Dev</option>
+            <option value="gamejam">Game Jam</option>
+          </select>
           <button type="submit">Create</button>
         </form>
 
@@ -143,6 +157,17 @@
             <input id="properties-board-snap-grid" type="checkbox" />
             Snap to grid
           </label>
+          <div id="properties-table-controls" class="properties-table-controls hidden">
+            <div class="properties-subheading">Table</div>
+            <label>
+              Rows
+              <input id="properties-table-rows" type="number" min="1" max="12" step="1" value="3" />
+            </label>
+            <label>
+              Columns
+              <input id="properties-table-cols" type="number" min="1" max="12" step="1" value="3" />
+            </label>
+          </div>
           <label>
             HEX
             <input id="properties-board-hex" type="text" maxlength="7" value="#fff1b8" />
@@ -225,18 +250,112 @@
             </label>
             <input id="create-color" class="create-color-picker" type="color" value="#fff1b8" title="Creation color" aria-label="Creation color" />
             <div class="shape-toolbar" aria-label="Add element">
-              <button class="shape-tool" type="button" data-shape-tool="ticket" title="Board">
-                <svg class="shape-tool-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"></rect></svg>
+              <button id="shape-menu-toggle" class="shape-menu-toggle" type="button" aria-expanded="false" aria-controls="shape-menu" title="Choose shape">
+                <svg class="shape-tool-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h6v6H5Z"></path><circle cx="17" cy="8" r="3"></circle><path d="M7 19 11 13l4 6Z"></path></svg>
+                <span>Shapes</span>
               </button>
-              <button class="shape-tool" type="button" data-shape-tool="circle" title="Circle">
-                <svg class="shape-tool-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"></circle></svg>
-              </button>
-              <button class="shape-tool" type="button" data-shape-tool="triangle" title="Triangle">
-                <svg class="shape-tool-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5 20 19H4Z"></path></svg>
-              </button>
-              <button class="shape-tool" type="button" data-shape-tool="hexagon" title="Hexagon">
-                <svg class="shape-tool-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8l5 8-5 8H8l-5-8Z"></path></svg>
-              </button>
+              <div id="shape-menu" class="shape-menu hidden" role="menu">
+                <button class="shape-tool" type="button" data-shape-tool="ticket" title="Board" role="menuitem">
+                  <svg class="shape-tool-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"></rect></svg>
+                  <span>Board</span>
+                </button>
+                <button class="shape-tool" type="button" data-shape-tool="rectangle" title="Rectangle" role="menuitem">
+                  <svg class="shape-tool-icon" viewBox="0 0 100 100" aria-hidden="true"><path d="M12 18H88V82H12Z"></path></svg>
+                  <span>Rectangle</span>
+                </button>
+                <button class="shape-tool" type="button" data-shape-tool="rounded-rectangle" title="Rounded rectangle" role="menuitem">
+                  <svg class="shape-tool-icon" viewBox="0 0 100 100" aria-hidden="true"><rect x="12" y="18" width="76" height="64" rx="12"></rect></svg>
+                  <span>Rounded</span>
+                </button>
+                <button class="shape-tool" type="button" data-shape-tool="circle" title="Circle" role="menuitem">
+                  <svg class="shape-tool-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"></circle></svg>
+                  <span>Circle</span>
+                </button>
+                <button class="shape-tool" type="button" data-shape-tool="triangle" title="Triangle" role="menuitem">
+                  <svg class="shape-tool-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5 20 19H4Z"></path></svg>
+                  <span>Triangle</span>
+                </button>
+                <button class="shape-tool" type="button" data-shape-tool="diamond" title="Diamond" role="menuitem">
+                  <svg class="shape-tool-icon" viewBox="0 0 100 100" aria-hidden="true"><path d="M50 8 92 50 50 92 8 50Z"></path></svg>
+                  <span>Diamond</span>
+                </button>
+                <button class="shape-tool" type="button" data-shape-tool="speech" title="Speech bubble" role="menuitem">
+                  <svg class="shape-tool-icon" viewBox="0 0 100 100" aria-hidden="true"><path d="M20 18H80C88 18 94 24 94 32V62C94 70 88 76 80 76H48L30 92V76H20C12 76 6 70 6 62V32C6 24 12 18 20 18Z"></path></svg>
+                  <span>Speech</span>
+                </button>
+                <button class="shape-tool" type="button" data-shape-tool="parallelogram" title="Parallelogram" role="menuitem">
+                  <svg class="shape-tool-icon" viewBox="0 0 100 100" aria-hidden="true"><path d="M24 18H94L76 82H6Z"></path></svg>
+                  <span>Parallelogram</span>
+                </button>
+                <button class="shape-tool" type="button" data-shape-tool="star" title="Star" role="menuitem">
+                  <svg class="shape-tool-icon" viewBox="0 0 100 100" aria-hidden="true"><path d="M50 8 60 36 90 36 66 54 75 84 50 66 25 84 34 54 10 36 40 36Z"></path></svg>
+                  <span>Star</span>
+                </button>
+                <button class="shape-tool" type="button" data-shape-tool="arrow-right" title="Right arrow" role="menuitem">
+                  <svg class="shape-tool-icon" viewBox="0 0 100 100" aria-hidden="true"><path d="M8 34H58V18L94 50 58 82V66H8Z"></path></svg>
+                  <span>Right arrow</span>
+                </button>
+                <button class="shape-tool" type="button" data-shape-tool="arrow-left" title="Left arrow" role="menuitem">
+                  <svg class="shape-tool-icon" viewBox="0 0 100 100" aria-hidden="true"><path d="M92 34H42V18L6 50 42 82V66H92Z"></path></svg>
+                  <span>Left arrow</span>
+                </button>
+                <button class="shape-tool" type="button" data-shape-tool="double-arrow" title="Double arrow" role="menuitem">
+                  <svg class="shape-tool-icon" viewBox="0 0 100 100" aria-hidden="true"><path d="M6 50 34 20V36H66V20L94 50 66 80V64H34V80Z"></path></svg>
+                  <span>Double arrow</span>
+                </button>
+                <button class="shape-tool" type="button" data-shape-tool="pentagon" title="Pentagon" role="menuitem">
+                  <svg class="shape-tool-icon" viewBox="0 0 100 100" aria-hidden="true"><path d="M50 8 90 38 74 88H26L10 38Z"></path></svg>
+                  <span>Pentagon</span>
+                </button>
+                <button class="shape-tool" type="button" data-shape-tool="octagon" title="Octagon" role="menuitem">
+                  <svg class="shape-tool-icon" viewBox="0 0 100 100" aria-hidden="true"><path d="M30 10H70L90 30V70L70 90H30L10 70V30Z"></path></svg>
+                  <span>Octagon</span>
+                </button>
+                <button class="shape-tool" type="button" data-shape-tool="hexagon" title="Hexagon" role="menuitem">
+                  <svg class="shape-tool-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8l5 8-5 8H8l-5-8Z"></path></svg>
+                  <span>Hexagon</span>
+                </button>
+                <button class="shape-tool" type="button" data-shape-tool="trapezoid" title="Trapezoid" role="menuitem">
+                  <svg class="shape-tool-icon" viewBox="0 0 100 100" aria-hidden="true"><path d="M22 18H78L92 82H8Z"></path></svg>
+                  <span>Trapezoid</span>
+                </button>
+                <button class="shape-tool" type="button" data-shape-tool="cloud" title="Cloud" role="menuitem">
+                  <svg class="shape-tool-icon" viewBox="0 0 100 100" aria-hidden="true"><path d="M30 74C17 74 10 65 10 54C10 44 18 36 29 36C33 23 45 16 58 22C67 20 76 26 78 36C88 38 94 46 94 56C94 67 85 74 72 74Z"></path></svg>
+                  <span>Cloud</span>
+                </button>
+                <button class="shape-tool" type="button" data-shape-tool="plus" title="Plus" role="menuitem">
+                  <svg class="shape-tool-icon" viewBox="0 0 100 100" aria-hidden="true"><path d="M40 8H60V38H92V60H60V92H40V60H8V38H40Z"></path></svg>
+                  <span>Plus</span>
+                </button>
+                <button class="shape-tool" type="button" data-shape-tool="cylinder" title="Cylinder" role="menuitem">
+                  <svg class="shape-tool-icon" viewBox="0 0 100 100" aria-hidden="true"><path d="M18 24C18 14 82 14 82 24V78C82 88 18 88 18 78Z"></path><path d="M18 24C18 34 82 34 82 24"></path></svg>
+                  <span>Cylinder</span>
+                </button>
+                <button class="shape-tool" type="button" data-shape-tool="brace-left" title="Left brace" role="menuitem">
+                  <svg class="shape-tool-icon" viewBox="0 0 100 100" aria-hidden="true"><path d="M64 8C44 8 42 22 42 34V40C42 47 34 48 28 50C34 52 42 53 42 60V66C42 78 44 92 64 92"></path></svg>
+                  <span>Left brace</span>
+                </button>
+                <button class="shape-tool" type="button" data-shape-tool="brace-right" title="Right brace" role="menuitem">
+                  <svg class="shape-tool-icon" viewBox="0 0 100 100" aria-hidden="true"><path d="M36 8C56 8 58 22 58 34V40C58 47 66 48 72 50C66 52 58 53 58 60V66C58 78 56 92 36 92"></path></svg>
+                  <span>Right brace</span>
+                </button>
+                <button class="shape-tool" type="button" data-shape-tool="chevron-right" title="Chevron right" role="menuitem">
+                  <svg class="shape-tool-icon" viewBox="0 0 100 100" aria-hidden="true"><path d="M10 28H62L90 50 62 72H10L30 50Z"></path></svg>
+                  <span>Chevron right</span>
+                </button>
+                <button class="shape-tool" type="button" data-shape-tool="chevron-left" title="Chevron left" role="menuitem">
+                  <svg class="shape-tool-icon" viewBox="0 0 100 100" aria-hidden="true"><path d="M90 28H38L10 50 38 72H90L70 50Z"></path></svg>
+                  <span>Chevron left</span>
+                </button>
+                <button class="shape-tool" type="button" data-shape-tool="table" title="Table" role="menuitem">
+                  <svg class="shape-tool-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4Z"></path><path d="M4 10h16"></path><path d="M9 5v14"></path><path d="M15 5v14"></path></svg>
+                  <span>Table</span>
+                </button>
+                <button class="shape-tool" type="button" data-shape-tool="folder" title="Folder" role="menuitem">
+                  <svg class="shape-tool-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h6l2 3h8v9H4Z"></path><path d="M4 10h16"></path></svg>
+                  <span>Folder</span>
+                </button>
+              </div>
               <button id="draw-tool" class="shape-tool" type="button" title="Draw">
                 <svg class="shape-tool-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4l11-11a2.8 2.8 0 0 0-4-4L4 16Z"></path><path d="M13 6l5 5"></path></svg>
               </button>
@@ -287,7 +406,7 @@
 
       <aside id="side-drawer" class="side-panel drawer drawer-right">
         <div id="side-drawer-resize" class="drawer-resize-handle" role="separator" aria-orientation="vertical" aria-label="Resize side panel"></div>
-        <button id="close-side-drawer" class="drawer-close ghost-button drawer-internal-close" type="button">&gt;</button>
+        <button id="close-side-drawer" class="drawer-close ghost-button drawer-internal-close" type="button">&lt;</button>
         <section id="hours-panel" class="hours-panel collapsible-panel">
           <div class="section-title">
             <button id="toggle-hours" class="collapse-button panel-internal-toggle" type="button" aria-expanded="true" aria-controls="hours-content">v</button>
@@ -392,6 +511,49 @@
           </div>
         </section>
 
+        <section id="level-design-panel" class="design-board-panel collapsible-panel">
+          <div class="section-title">
+            <button id="toggle-level-design" class="collapse-button panel-internal-toggle" type="button" aria-expanded="true" aria-controls="level-design-content">v</button>
+            <div class="section-copy">
+              <h2>Level Design Board</h2>
+            </div>
+          </div>
+          <div id="level-design-content" class="panel-content">
+            <button id="add-level-design-board" class="design-board-create" type="button">+ Level board</button>
+            <div class="design-board-fields">
+              <span>Objetivo do nivel</span>
+              <span>Obstaculos</span>
+              <span>Inimigos</span>
+              <span>Progressao</span>
+              <span>Recompensas</span>
+              <span>Dificuldade</span>
+              <span>Referencias visuais</span>
+            </div>
+          </div>
+        </section>
+
+        <section id="character-design-panel" class="design-board-panel collapsible-panel">
+          <div class="section-title">
+            <button id="toggle-character-design" class="collapse-button panel-internal-toggle" type="button" aria-expanded="true" aria-controls="character-design-content">v</button>
+            <div class="section-copy">
+              <h2>Character Design Board</h2>
+            </div>
+          </div>
+          <div id="character-design-content" class="panel-content">
+            <button id="add-character-design-board" class="design-board-create" type="button">+ Character board</button>
+            <div class="design-board-fields">
+              <span>Nome</span>
+              <span>Historia</span>
+              <span>Personalidade</span>
+              <span>Habilidades</span>
+              <span>Animacoes</span>
+              <span>Sprites</span>
+              <span>Sons</span>
+              <span>Referencias</span>
+            </div>
+          </div>
+        </section>
+
         <section id="story-panel" class="story-panel collapsible-panel">
           <div class="section-title">
             <button id="toggle-story" class="collapse-button panel-internal-toggle" type="button" aria-expanded="true" aria-controls="story-content">v</button>
@@ -465,6 +627,7 @@
         "js/app-core.js",
         "js/auth-realtime.js",
         "js/state-history.js",
+        "js/shape-definitions.js",
         "js/render-board.js",
         "js/board-tools.js",
         "js/tasks-hours.js",

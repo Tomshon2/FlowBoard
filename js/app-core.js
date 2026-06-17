@@ -35,6 +35,22 @@ const DEFAULT_CONNECTION_COLOR = "#172033";
 const DEFAULT_CONNECTION_THICKNESS = 3;
 const DEFAULT_DRAWING_THICKNESS = 4;
 const BOARD_GRID_SIZE = 28;
+const PROJECT_KIND_GAMEDEV = "gamedev";
+const PROJECT_KIND_GAMEJAM = "gamejam";
+const GAMEJAM_SHAPE_TOOLS = new Set(["rectangle", "circle", "diamond"]);
+
+function getProjectKind(project = typeof getActiveProject === "function" ? getActiveProject() : null) {
+  return project?.kind === PROJECT_KIND_GAMEJAM ? PROJECT_KIND_GAMEJAM : PROJECT_KIND_GAMEDEV;
+}
+
+function isGameJamProject(project = typeof getActiveProject === "function" ? getActiveProject() : null) {
+  return getProjectKind(project) === PROJECT_KIND_GAMEJAM;
+}
+
+function isShapeToolAllowedForProject(tool, project = typeof getActiveProject === "function" ? getActiveProject() : null) {
+  if (!isGameJamProject(project)) return true;
+  return GAMEJAM_SHAPE_TOOLS.has(tool);
+}
 
 function getPersonalThemeKey() {
   const userKey = currentUser?.id || currentUser?.email || currentDisplayName || "local";
@@ -163,6 +179,7 @@ const defaultState = {
     {
       id: "project-1",
       name: "Example project",
+      kind: PROJECT_KIND_GAMEDEV,
       totalHours: 40,
       hourPlan: createDefaultHourPlan(),
       tasks: [
@@ -229,6 +246,7 @@ const passwordRules = document.querySelector("#password-rules");
 const projectsList = document.querySelector("#projects-list");
 const projectForm = document.querySelector("#project-form");
 const projectName = document.querySelector("#project-name");
+const projectKind = document.querySelector("#project-kind");
 const activeProjectTitle = document.querySelector("#active-project-title");
 const board = document.querySelector("#board");
 const boardContent = document.querySelector("#board-content");
@@ -256,6 +274,8 @@ const importTasksCsvInput = document.querySelector("#import-tasks-csv-input");
 const imageInput = document.querySelector("#image-input");
 const drawTool = document.querySelector("#draw-tool");
 const createColor = document.querySelector("#create-color");
+const shapeMenuToggle = document.querySelector("#shape-menu-toggle");
+const shapeMenu = document.querySelector("#shape-menu");
 const shapeTools = document.querySelectorAll("[data-shape-tool]");
 const templateSelect = document.querySelector("#template-select");
 const boardGridBtn = document.querySelector("#board-grid-btn");
@@ -281,6 +301,9 @@ const propertiesBoardBorderColor = document.querySelector("#properties-board-bor
 const propertiesBoardBorderThickness = document.querySelector("#properties-board-border-thickness");
 const propertiesBoardBorderThicknessLabel = document.querySelector("#properties-board-border-thickness-label");
 const propertiesBoardSnapGrid = document.querySelector("#properties-board-snap-grid");
+const propertiesTableControls = document.querySelector("#properties-table-controls");
+const propertiesTableRows = document.querySelector("#properties-table-rows");
+const propertiesTableCols = document.querySelector("#properties-table-cols");
 const propertiesBoardHex = document.querySelector("#properties-board-hex");
 const propertiesBoardText = document.querySelector("#properties-board-text");
 const propertiesFontFamily = document.querySelector("#properties-font-family");
@@ -304,12 +327,16 @@ const propertiesLineSnapGrid = document.querySelector("#properties-line-snap-gri
 const hoursPanel = document.querySelector("#hours-panel");
 const tasksPanel = document.querySelector("#tasks-panel");
 const storyPanel = document.querySelector("#story-panel");
+const levelDesignPanel = document.querySelector("#level-design-panel");
+const characterDesignPanel = document.querySelector("#character-design-panel");
 const teamPanel = document.querySelector("#team-panel");
 const milestonesPanel = document.querySelector("#milestones-panel");
 const historyPanel = document.querySelector("#history-panel");
 const toggleHours = document.querySelector("#toggle-hours");
 const toggleTasks = document.querySelector("#toggle-tasks");
 const toggleStory = document.querySelector("#toggle-story");
+const toggleLevelDesign = document.querySelector("#toggle-level-design");
+const toggleCharacterDesign = document.querySelector("#toggle-character-design");
 const toggleTeam = document.querySelector("#toggle-team");
 const toggleMilestones = document.querySelector("#toggle-milestones");
 const toggleHistory = document.querySelector("#toggle-history");
@@ -317,6 +344,8 @@ const workspaceDrawerToggle = document.querySelector("#workspace-drawer-toggle")
 const hoursDrawerToggle = document.querySelector("#hours-drawer-toggle");
 const tasksDrawerToggle = document.querySelector("#tasks-drawer-toggle");
 const storyDrawerToggle = document.querySelector("#story-drawer-toggle");
+const levelDesignDrawerToggle = document.querySelector("#level-design-drawer-toggle");
+const characterDesignDrawerToggle = document.querySelector("#character-design-drawer-toggle");
 const teamDrawerToggle = document.querySelector("#team-drawer-toggle");
 const milestonesDrawerToggle = document.querySelector("#milestones-drawer-toggle");
 const historyDrawerToggle = document.querySelector("#history-drawer-toggle");
@@ -336,6 +365,8 @@ const storyRootForm = document.querySelector("#story-root-form");
 const storyRootTitle = document.querySelector("#story-root-title");
 const storyTree = document.querySelector("#story-tree");
 const storyCount = document.querySelector("#story-count");
+const addLevelDesignBoard = document.querySelector("#add-level-design-board");
+const addCharacterDesignBoard = document.querySelector("#add-character-design-board");
 const gddConcept = document.querySelector("#gdd-concept");
 const gddGenre = document.querySelector("#gdd-genre");
 const gddCharacterList = document.querySelector("#gdd-character-list");
@@ -412,13 +443,14 @@ importTasksCsvInput.addEventListener("change", (event) => {
   importTasksCsvInput.value = "";
 });
 
-projectForm.addEventListener("submit", (event) => {
-  event.preventDefault();
-  const name = cleanUserText(projectName.value, 80);
-  if (!name) return;
+function createProject(name, kind = PROJECT_KIND_GAMEDEV) {
+  const cleanName = cleanUserText(name, 80);
+  if (!cleanName) return null;
+  const projectKindValue = kind === PROJECT_KIND_GAMEJAM ? PROJECT_KIND_GAMEJAM : PROJECT_KIND_GAMEDEV;
   const project = {
     id: crypto.randomUUID(),
-    name,
+    name: cleanName,
+    kind: projectKindValue,
     favorite: false,
     modifiedAt: Date.now(),
     totalHours: 40,
@@ -430,7 +462,7 @@ projectForm.addEventListener("submit", (event) => {
       id: crypto.randomUUID(),
       user: getCurrentEventUser(),
       action: "Project created",
-      target: name,
+      target: cleanName,
       targetId: "",
       at: new Date().toISOString()
     }],
@@ -441,7 +473,16 @@ projectForm.addEventListener("submit", (event) => {
   };
   state.projects.push(project);
   state.activeProjectId = project.id;
+  return project;
+}
+
+projectForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const kind = projectKind?.value === PROJECT_KIND_GAMEJAM ? PROJECT_KIND_GAMEJAM : PROJECT_KIND_GAMEDEV;
+  const project = createProject(projectName.value, kind);
+  if (!project) return;
   projectName.value = "";
+  if (projectKind) projectKind.value = PROJECT_KIND_GAMEDEV;
   saveAndRender();
 });
 
@@ -449,11 +490,20 @@ shapeTools.forEach((tool) => {
   tool.addEventListener("click", () => {
     if (drawMode) toggleDrawMode();
     setActiveShapeTool(activeShapeTool === tool.dataset.shapeTool ? null : tool.dataset.shapeTool);
+    setShapeMenuOpen(false);
   });
+});
+shapeMenuToggle.addEventListener("click", (event) => {
+  event.stopPropagation();
+  setShapeMenuOpen(shapeMenu.classList.contains("hidden"));
 });
 drawTool.addEventListener("click", () => {
   setActiveShapeTool(null);
+  setShapeMenuOpen(false);
   toggleDrawMode();
+});
+document.addEventListener("pointerdown", (event) => {
+  if (!event.target.closest(".shape-toolbar")) setShapeMenuOpen(false);
 });
 templateSelect.addEventListener("change", (event) => {
   const templateId = event.target.value;
@@ -476,6 +526,8 @@ propertiesBoardColor.addEventListener("input", (event) => updateSelectedBoardCol
 propertiesBoardBorderColor.addEventListener("input", (event) => updateSelectedBoardBorder({ borderColor: event.target.value }));
 propertiesBoardBorderThickness.addEventListener("input", (event) => updateSelectedBoardBorder({ borderThickness: Number(event.target.value) }));
 propertiesBoardSnapGrid.addEventListener("change", (event) => updateSelectedBoardSnapToGrid(event.target.checked));
+propertiesTableRows.addEventListener("change", (event) => updateSelectedTableSize({ rows: Number(event.target.value) }));
+propertiesTableCols.addEventListener("change", (event) => updateSelectedTableSize({ cols: Number(event.target.value) }));
 propertiesBoardHex.addEventListener("input", (event) => updateSelectedBoardColor(normalizeHexInput(event.target.value)));
 propertiesBoardText.addEventListener("input", (event) => updateSelectedBoardText(event.target.value));
 propertiesFontFamily.addEventListener("change", (event) => updateSelectedBoardTextStyle({ fontFamily: event.target.value }));
@@ -537,6 +589,8 @@ projectHours.addEventListener("change", () => saveProjectHours());
 toggleHours.addEventListener("click", () => togglePanel(hoursPanel, toggleHours));
 toggleTasks.addEventListener("click", () => togglePanel(tasksPanel, toggleTasks));
 toggleStory.addEventListener("click", () => togglePanel(storyPanel, toggleStory));
+toggleLevelDesign.addEventListener("click", () => togglePanel(levelDesignPanel, toggleLevelDesign));
+toggleCharacterDesign.addEventListener("click", () => togglePanel(characterDesignPanel, toggleCharacterDesign));
 toggleTeam.addEventListener("click", () => togglePanel(teamPanel, toggleTeam));
 toggleMilestones.addEventListener("click", () => togglePanel(milestonesPanel, toggleMilestones));
 toggleHistory.addEventListener("click", () => togglePanel(historyPanel, toggleHistory));
@@ -544,11 +598,15 @@ workspaceDrawerToggle.addEventListener("click", () => toggleDrawer("workspace"))
 hoursDrawerToggle.addEventListener("click", () => toggleSidePanel("hours"));
 tasksDrawerToggle.addEventListener("click", () => toggleSidePanel("tasks"));
 storyDrawerToggle.addEventListener("click", () => toggleSidePanel("story"));
+levelDesignDrawerToggle.addEventListener("click", () => toggleSidePanel("level-design"));
+characterDesignDrawerToggle.addEventListener("click", () => toggleSidePanel("character-design"));
 teamDrawerToggle.addEventListener("click", () => toggleSidePanel("team"));
 milestonesDrawerToggle.addEventListener("click", () => toggleSidePanel("milestones"));
 historyDrawerToggle.addEventListener("click", () => toggleSidePanel("history"));
 closeWorkspaceDrawer.addEventListener("click", () => closeDrawer("workspace"));
 closeSideDrawer.addEventListener("click", () => closeDrawer("side"));
+addLevelDesignBoard.addEventListener("click", () => addDesignBoardTemplate("level"));
+addCharacterDesignBoard.addEventListener("click", () => addDesignBoardTemplate("character"));
 
 milestoneForm.addEventListener("submit", (event) => {
   event.preventDefault();

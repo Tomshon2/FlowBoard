@@ -1,5 +1,6 @@
 ﻿function render() {
   renderBoardSurface();
+  renderProjectModeUi();
   renderProjects();
   renderWorkspace();
   renderRemoteCursors();
@@ -32,6 +33,24 @@ function renderBoardTheme() {
   renderBoardSurface();
 }
 
+function renderProjectModeUi() {
+  const project = getActiveProject();
+  const gameJam = isGameJamProject(project);
+  app.classList.toggle("gamejam-mode", gameJam);
+  shapeTools.forEach((button) => {
+    const allowed = isShapeToolAllowedForProject(button.dataset.shapeTool, project);
+    button.classList.toggle("project-mode-hidden", !allowed);
+    button.disabled = !allowed;
+  });
+  if (gameJam && activeShapeTool && !isShapeToolAllowedForProject(activeShapeTool, project)) {
+    setActiveShapeTool(null);
+  }
+  if (gameJam && !["hours", "tasks", "story"].includes(activeSidePanel)) {
+    activeSidePanel = "hours";
+    sideDrawer.dataset.mode = activeSidePanel;
+  }
+}
+
 function renderConnectionStylePanel() {
   connectionStylePanel.classList.add("hidden");
   renderPropertiesPanel();
@@ -50,15 +69,17 @@ function renderPropertiesPanel() {
   propertiesPanel.setAttribute("aria-hidden", String(!hasSelection));
   boardProperties.classList.toggle("hidden", !selectedBoards.length);
   lineProperties.classList.toggle("hidden", !(selectedLine || editingDrawingTool));
+  propertiesTableControls.classList.add("hidden");
   if (!hasSelection) return;
 
   if (selectedBoards.length) {
     const editableBoards = selectedBoards.filter((item) => item.type !== "image");
     const referenceBoard = editableBoards[0] || selectedBoard;
     const isShape = referenceBoard.type === "shape";
+    const isTable = referenceBoard.type === "table";
     propertiesTitle.textContent = selectedBoards.length > 1
       ? `${selectedBoards.length} selected boards`
-      : isShape ? getShapeLabel(referenceBoard.shape) : referenceBoard.type === "image" ? "Image" : "Board";
+      : isTable ? referenceBoard.tableKind === "folder" ? "Folder" : "Table" : isShape ? getShapeLabel(referenceBoard.shape) : referenceBoard.type === "image" ? "Image" : "Board";
     const color = normalizeHexColor(referenceBoard.color || ticketColors[0]);
     propertiesBoardColor.value = color;
     propertiesBoardHex.value = color;
@@ -71,6 +92,12 @@ function renderPropertiesPanel() {
     propertiesBoardBorderThicknessLabel.textContent = `${propertiesBoardBorderThickness.value}px`;
     propertiesBoardSnapGrid.disabled = !editableBoards.length;
     propertiesBoardSnapGrid.checked = editableBoards.length ? editableBoards.every((item) => item.snapToGrid === true) : false;
+    propertiesTableControls.classList.toggle("hidden", !(selectedBoards.length === 1 && isTable));
+    if (isTable) {
+      const table = normalizeTableData(referenceBoard);
+      propertiesTableRows.value = String(table.rows);
+      propertiesTableCols.value = String(table.cols);
+    }
     propertiesBoardColor.disabled = !editableBoards.length;
     propertiesBoardHex.disabled = !editableBoards.length;
     propertiesBoardText.disabled = !editableBoards.length;
@@ -159,6 +186,44 @@ function updateSelectedBoardSnapToGrid(enabled) {
     historyEntry: createBatchHistoryCommand("updateBoardSnapToGrid", commands, {
       targetId: items.map((item) => item.id).join(","),
       groupKey: `items:${items.map((item) => item.id).sort().join(",")}:snapToGrid`
+    })
+  });
+}
+
+function updateSelectedTableSize(size) {
+  const project = getActiveProject();
+  const item = getSelectedBoardItems(project).find((candidate) => candidate.type === "table");
+  if (!project || !item) return;
+  const before = structuredClone(item);
+  const table = normalizeTableData(item);
+  const nextRows = clamp(Number(size.rows ?? table.rows) || table.rows, 1, 12);
+  const nextCols = clamp(Number(size.cols ?? table.cols) || table.cols, 1, 12);
+  if (nextRows === table.rows && nextCols === table.cols) return;
+
+  const previousCells = table.cells.map((cell) => ({ ...cell }));
+  const nextCells = [];
+  for (let row = 0; row < nextRows; row += 1) {
+    for (let col = 0; col < nextCols; col += 1) {
+      nextCells.push(previousCells[row * table.cols + col] || { text: "" });
+    }
+  }
+  item.table = {
+    rows: nextRows,
+    cols: nextCols,
+    cells: nextCells
+  };
+
+  const node = boardContent.querySelector(`[data-id="${item.id}"]`);
+  if (node) {
+    node.querySelector(".board-table")?.remove();
+    node.prepend(createTableNode(item));
+  }
+  propertiesTableRows.value = String(nextRows);
+  propertiesTableCols.value = String(nextCols);
+  saveState({
+    historyEntry: createHistoryCommand("updateItem", item.id, before, item, {
+      projectId: project.id,
+      groupKey: `item:${item.id}:table-size`
     })
   });
 }
@@ -271,6 +336,11 @@ function applyItemColorToNode(item, node) {
     node.style.background = "transparent";
     return;
   }
+  if (item.type === "table") {
+    node.style.setProperty("--table-fill-color", item.color || "#ffffff");
+    node.style.background = "transparent";
+    return;
+  }
   node.style.background = item.color || ticketColors[0];
 }
 
@@ -282,13 +352,13 @@ function applyItemBorderToNode(item, node) {
   if (item.type === "shape") {
     const shape = node.querySelector(".shape-visual");
     if (shape) {
-      shape.style.borderColor = color;
-      shape.style.borderWidth = `${thickness}px`;
+      shape.style.borderColor = "";
+      shape.style.borderWidth = "";
     }
     return;
   }
-  node.style.borderColor = color;
-  node.style.borderWidth = `${thickness}px`;
+  node.style.borderColor = "transparent";
+  node.style.borderWidth = "0";
 }
 
 function updateSelectedBoardBorder(style) {
@@ -381,23 +451,62 @@ function applyTextStyleToNode(node, textStyle) {
 function fitItemText(node, item) {
   if (!node || item.type === "image") return;
   const textStyle = getItemTextStyle(item);
-  node.style.fontSize = `${textStyle.fontSize}px`;
+  const baseSize = clamp(Number(textStyle.fontSize) || 16, 10, 72);
+  node.style.fontSize = `${baseSize}px`;
+}
+
+function measureBoardText(node, item, width, height) {
+  if (!node || item.type === "image") return { width: 0, height: 0, availableWidth: 0, availableHeight: 0 };
+  const factors = getTextBoxFactors(item);
+  const availableWidth = Math.max(24, width * factors.width - 8);
+  const availableHeight = Math.max(18, height * factors.height - 8);
+  const measure = document.createElement("div");
+  const style = getComputedStyle(node);
+  measure.style.position = "fixed";
+  measure.style.left = "-10000px";
+  measure.style.top = "0";
+  measure.style.width = `${availableWidth}px`;
+  measure.style.minHeight = "0";
+  measure.style.padding = "0";
+  measure.style.border = "0";
+  measure.style.visibility = "hidden";
+  measure.style.pointerEvents = "none";
+  measure.style.boxSizing = "border-box";
+  measure.style.fontFamily = style.fontFamily;
+  measure.style.fontSize = style.fontSize;
+  measure.style.fontWeight = style.fontWeight;
+  measure.style.fontStyle = style.fontStyle;
+  measure.style.lineHeight = style.lineHeight;
+  measure.style.letterSpacing = style.letterSpacing;
+  measure.style.textDecoration = style.textDecoration;
+  measure.style.textAlign = "center";
+  measure.style.whiteSpace = "normal";
+  measure.style.overflowWrap = "anywhere";
+  measure.style.wordBreak = "break-word";
+  measure.innerHTML = node.innerHTML || escapeHtml(item.text || "");
+  document.body.append(measure);
+  const measured = {
+    width: Math.ceil(measure.scrollWidth),
+    height: Math.ceil(measure.scrollHeight),
+    availableWidth,
+    availableHeight
+  };
+  measure.remove();
+  return measured;
 }
 
 function getTextBoxFactors(item) {
   if (item.type !== "shape") return { width: 1, height: 1 };
-  const shape = item.shape || "circle";
-  if (shape === "triangle") return { width: 0.56, height: 0.42 };
-  if (shape === "hexagon") return { width: 0.72, height: 0.56 };
-  return { width: 0.88, height: 0.86 };
+  const box = getShapeTextBox(item.shape || "circle");
+  return { width: box.width, height: box.height };
 }
 
 function getMinimumItemSize(item, widthHint = item.width) {
   const base = {
-    width: item.type === "image" ? 170 : item.type === "shape" ? 96 : 130,
-    height: item.type === "image" ? 160 : item.type === "shape" ? 86 : 90
+    width: item.type === "image" ? 170 : item.type === "table" ? 180 : item.type === "shape" ? 96 : 130,
+    height: item.type === "image" ? 160 : item.type === "table" ? 120 : item.type === "shape" ? 86 : 90
   };
-  if (item.type === "image") return base;
+  if (item.type === "image" || item.type === "table") return base;
 
   const plainText = (item.text || htmlToPlainText(item.html || "")).trim();
   if (!plainText) return base;
@@ -422,15 +531,34 @@ function getMinimumItemSize(item, widthHint = item.width) {
 
 function ensureItemFitsText(item, node) {
   const minSize = getMinimumItemSize(item, item.width);
-  const nextWidth = Math.max(item.width || minSize.width, minSize.width);
-  const nextHeight = Math.max(item.height || minSize.height, minSize.height);
-  if (nextWidth === item.width && nextHeight === item.height) return;
+  let nextWidth = Math.max(item.width || minSize.width, minSize.width);
+  let nextHeight = Math.max(item.height || minSize.height, minSize.height);
+  const textNode = node?.querySelector?.(".item-text");
+  if (node && textNode && item.type !== "image") {
+    if (nextWidth !== item.width) node.style.width = `${nextWidth}px`;
+    if (nextHeight !== item.height) node.style.height = `${nextHeight}px`;
+    fitItemText(textNode, item);
+    const factors = getTextBoxFactors(item);
+    for (let attempts = 0; attempts < 8; attempts += 1) {
+      const measured = measureBoardText(textNode, item, nextWidth, nextHeight);
+      const widthOverflow = Math.max(0, measured.width - measured.availableWidth);
+      const heightOverflow = Math.max(0, measured.height - measured.availableHeight);
+      if (widthOverflow <= 1 && heightOverflow <= 1) break;
+      nextWidth = Math.min(2200, Math.ceil(nextWidth + widthOverflow / Math.max(0.2, factors.width) + 24));
+      nextHeight = Math.min(2200, Math.ceil(nextHeight + heightOverflow / Math.max(0.2, factors.height) + 24));
+      node.style.width = `${nextWidth}px`;
+      node.style.height = `${nextHeight}px`;
+      fitItemText(textNode, item);
+    }
+  }
+  if (nextWidth === item.width && nextHeight === item.height) return false;
   item.width = nextWidth;
   item.height = nextHeight;
   if (node) {
     node.style.width = `${item.width}px`;
     node.style.height = `${item.height}px`;
   }
+  return true;
 }
 
 function updateSelectedBoardText(value) {
@@ -444,10 +572,12 @@ function updateSelectedBoardText(value) {
     item.html = escapeHtml(value).replace(/\n/g, "<br>");
     const itemNode = boardContent.querySelector(`[data-id="${item.id}"]`);
     const textNode = itemNode?.querySelector(".item-text");
-    ensureItemFitsText(item, itemNode);
     if (textNode && textNode !== document.activeElement) {
       textNode.innerHTML = item.html;
+      ensureItemFitsText(item, itemNode);
       fitItemText(textNode, item);
+    } else {
+      ensureItemFitsText(item, itemNode);
     }
     commands.push(createHistoryCommand("updateItem", item.id, before, item, { projectId: project.id }));
   });
@@ -463,14 +593,6 @@ function htmlToPlainText(html) {
   const template = document.createElement("template");
   template.innerHTML = html.replace(/<br\s*\/?>/gi, "\n");
   return template.content.textContent || "";
-}
-
-function getShapeLabel(shape) {
-  return {
-    circle: "Circle",
-    triangle: "Triangle",
-    hexagon: "Hexagon"
-  }[shape] || "Shape";
 }
 
 function updateSelectedConnections(style) {
@@ -568,6 +690,24 @@ function renderProjects() {
     if (Boolean(a.favorite) !== Boolean(b.favorite)) return a.favorite ? -1 : 1;
     return (Number(b.modifiedAt) || 0) - (Number(a.modifiedAt) || 0);
   });
+  if (!projects.length) {
+    const empty = document.createElement("div");
+    empty.className = "projects-empty-state";
+    empty.innerHTML = `
+      <strong>No projects yet</strong>
+      <span>Create your first board to start working.</span>
+    `;
+    const createButton = document.createElement("button");
+    createButton.type = "button";
+    createButton.textContent = "Create project 1";
+    createButton.addEventListener("click", () => {
+      createProject("Project 1", PROJECT_KIND_GAMEDEV);
+      saveAndRender();
+    });
+    empty.append(createButton);
+    projectsList.append(empty);
+    return;
+  }
   projects.forEach((project) => {
     const row = document.createElement("div");
     row.className = `project-item ${project.id === state.activeProjectId ? "active" : ""}`;
@@ -604,7 +744,7 @@ function renderProjects() {
       selectButton.className = "project-select";
       selectButton.innerHTML = `
         <span class="project-name">${escapeHtml(project.name)}</span>
-        <small>Modified ${formatProjectModified(project.modifiedAt)}</small>
+        <small>${getProjectKind(project) === PROJECT_KIND_GAMEJAM ? "Game Jam" : "Game Dev"} - Modified ${formatProjectModified(project.modifiedAt)}</small>
         <strong>${project.tasks.length}</strong>
       `;
       selectButton.addEventListener("click", () => {
@@ -687,7 +827,7 @@ function renderWorkspace() {
   renderConnections(project);
 
   project.items.forEach((item) => {
-    const boardLike = item.type === "ticket" || item.type === "shape";
+    const boardLike = item.type === "ticket" || item.type === "shape" || item.type === "table";
     const showInlineBoardTools = false;
     ensureItemFitsText(item);
     const node = document.createElement("article");
@@ -699,10 +839,13 @@ function renderWorkspace() {
     node.style.width = `${item.width}px`;
     node.style.height = `${item.height}px`;
     node.style.background = item.type === "ticket" ? item.color : item.type === "image" ? "#ffffff" : "transparent";
+    if (item.type === "table") node.style.setProperty("--table-fill-color", item.color || "#ffffff");
+    if (item.type === "shape") applyShapeTextBoxStyles(node, item.shape || "circle");
     node.dataset.id = item.id;
     applyItemBorderToNode(item, node);
     node.classList.toggle("multi-selected", selectedItemIds.has(item.id));
     node.addEventListener("pointerdown", (event) => {
+      if (spacePressed) return;
       if (activeShapeTool) setActiveShapeTool(null);
       if (drawMode) toggleDrawMode();
       selectedBoardItemId = item.id;
@@ -720,6 +863,7 @@ function renderWorkspace() {
           selectedDrawingIds.clear();
         }
         selectedBoardItemId = item.id;
+        closeDrawersForBoardSelection();
         renderSelectionClasses();
         renderPropertiesPanel();
         return;
@@ -728,6 +872,7 @@ function renderWorkspace() {
         selectedItemIds = new Set([item.id]);
         selectedConnectionIds.clear();
         selectedDrawingIds.clear();
+        closeDrawersForBoardSelection();
         renderSelectionClasses();
         renderPropertiesPanel();
         enterItemTextEdit(event, node, item);
@@ -739,6 +884,7 @@ function renderWorkspace() {
         selectedDrawingIds.clear();
       }
       selectedBoardItemId = item.id;
+      closeDrawersForBoardSelection();
       renderSelectionClasses();
       renderPropertiesPanel();
       startDrag(event, item.id);
@@ -930,56 +1076,61 @@ function renderWorkspace() {
     }
 
     if (item.type === "shape") {
-      const shape = document.createElement("div");
-      shape.className = `shape-visual shape-${item.shape || "circle"}`;
-      shape.style.setProperty("--shape-color", item.color || ticketColors[0]);
-      node.append(shape);
+      node.append(createShapeVisual(item.shape || "circle", item.color || ticketColors[0]));
     }
 
-    const text = document.createElement("div");
-    text.className = `item-text ${item.type === "image" ? "image-caption" : ""} ${item.type === "shape" ? "shape-text" : ""}`;
-    text.classList.toggle("caption-hidden", item.type === "image" && !item.captionOpen);
-    text.contentEditable = "false";
-    text.dataset.placeholder = boardLike ? "Describe the board" : "Write a caption";
-    text.innerHTML = boardLike ? (item.html || escapeHtml(item.text || "")) : escapeHtml(item.text || "");
-    applyTextStyleToNode(text, getItemTextStyle(item));
-    text.addEventListener("pointerdown", (event) => {
-      if (event.shiftKey) {
-        event.preventDefault();
+    if (item.type === "table") {
+      node.append(createTableNode(item, node));
+    }
+
+    let text = null;
+    if (item.type !== "table") {
+      text = document.createElement("div");
+      text.className = `item-text ${item.type === "image" ? "image-caption" : ""} ${item.type === "shape" ? "shape-text" : ""}`;
+      text.classList.toggle("caption-hidden", item.type === "image" && !item.captionOpen);
+      text.contentEditable = "false";
+      text.dataset.placeholder = boardLike ? "Describe the board" : "Write a caption";
+      text.innerHTML = boardLike ? (item.html || escapeHtml(item.text || "")) : escapeHtml(item.text || "");
+      applyTextStyleToNode(text, getItemTextStyle(item));
+      text.addEventListener("pointerdown", (event) => {
+        if (spacePressed) return;
+        if (event.shiftKey) {
+          event.preventDefault();
+          event.stopPropagation();
+          toggleItemSelection(item.id);
+          return;
+        }
+        selectedBoardItemId = item.id;
+        if (!selectedItemIds.has(item.id)) selectedItemIds = new Set([item.id]);
+        selectedConnectionIds.clear();
+        selectedDrawingIds.clear();
+        renderSelectionClasses();
+        renderPropertiesPanel();
         event.stopPropagation();
-        toggleItemSelection(item.id);
-        return;
-      }
-      selectedBoardItemId = item.id;
-      if (!selectedItemIds.has(item.id)) selectedItemIds = new Set([item.id]);
-      selectedConnectionIds.clear();
-      selectedDrawingIds.clear();
-      renderSelectionClasses();
-      renderPropertiesPanel();
-      event.stopPropagation();
-    });
-    text.addEventListener("input", () => {
-      const before = structuredClone(item);
-      item.html = sanitizeEditableHtml(text.innerHTML);
-      item.text = text.textContent;
-      ensureItemFitsText(item, node);
-      fitItemText(text, item);
-      renderPropertiesPanel();
-      saveState({
-        historyEntry: createHistoryCommand("updateItem", item.id, before, item, {
-          projectId: state.activeProjectId,
-          groupKey: `item:${item.id}:text`
-        })
       });
-    });
-    text.addEventListener("blur", () => exitItemTextEdit(node, text, item));
-    text.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        text.blur();
-      }
-    });
-    node.append(text);
+      text.addEventListener("input", () => {
+        const before = structuredClone(item);
+        item.html = sanitizeEditableHtml(text.innerHTML);
+        item.text = text.textContent;
+        ensureItemFitsText(item, node);
+        fitItemText(text, item);
+        renderPropertiesPanel();
+        saveState({
+          historyEntry: createHistoryCommand("updateItem", item.id, before, item, {
+            projectId: state.activeProjectId,
+            groupKey: `item:${item.id}:text`
+          })
+        });
+      });
+      text.addEventListener("blur", () => exitItemTextEdit(node, text, item));
+      text.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          text.blur();
+        }
+      });
+      node.append(text);
+    }
 
     const linkedTasks = (project.tasks || []).filter((task) => task.linkedItemId === item.id);
     if (linkedTasks.length) {
@@ -1003,10 +1154,96 @@ function renderWorkspace() {
     node.append(createConnectionDots(item));
 
     boardContent.append(node);
-    window.requestAnimationFrame(() => fitItemText(text, item));
-    node.addEventListener("dblclick", (event) => enterItemTextEdit(event, node, item));
+    if (text) {
+      window.requestAnimationFrame(() => {
+        const resizedForText = ensureItemFitsText(item, node);
+        fitItemText(text, item);
+        if (resizedForText) {
+          connectionsLayer.innerHTML = "";
+          renderConnections(project);
+        }
+      });
+      node.addEventListener("dblclick", (event) => enterItemTextEdit(event, node, item));
+    }
     node.addEventListener("dragstart", (event) => event.preventDefault());
   });
+}
+
+function normalizeTableData(item) {
+  const fallback = typeof createTableItemDefaults === "function" ? createTableItemDefaults(item.tableKind || "table").table : { rows: 3, cols: 3, cells: [] };
+  item.table ??= fallback;
+  item.table.rows = clamp(Number(item.table.rows) || fallback.rows || 3, 1, 12);
+  item.table.cols = clamp(Number(item.table.cols) || fallback.cols || 3, 1, 12);
+  const total = item.table.rows * item.table.cols;
+  item.table.cells = Array.from({ length: total }, (_, index) => ({
+    text: String(item.table.cells?.[index]?.text || "").slice(0, 1000)
+  }));
+  return item.table;
+}
+
+function createTableNode(item) {
+  const table = normalizeTableData(item);
+  const tableNode = document.createElement("div");
+  tableNode.className = `board-table ${item.tableKind === "folder" ? "board-folder" : ""}`;
+  tableNode.style.setProperty("--table-rows", String(table.rows));
+  tableNode.style.setProperty("--table-cols", String(table.cols));
+  table.cells.forEach((cell, index) => {
+    const cellNode = document.createElement("div");
+    cellNode.className = "board-table-cell";
+    cellNode.contentEditable = "false";
+    cellNode.dataset.placeholder = "Text";
+    cellNode.textContent = cell.text || "";
+    cellNode.addEventListener("pointerdown", (event) => {
+      if (cellNode.contentEditable !== "true") return;
+      selectedBoardItemId = item.id;
+      if (!selectedItemIds.has(item.id)) selectedItemIds = new Set([item.id]);
+      selectedConnectionIds.clear();
+      selectedDrawingIds.clear();
+      renderSelectionClasses();
+      renderPropertiesPanel();
+      event.stopPropagation();
+    });
+    cellNode.addEventListener("dblclick", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      selectedBoardItemId = item.id;
+      selectedItemIds = new Set([item.id]);
+      selectedConnectionIds.clear();
+      selectedDrawingIds.clear();
+      renderSelectionClasses();
+      renderPropertiesPanel();
+      cellNode.contentEditable = "true";
+      cellNode.focus({ preventScroll: true });
+      const range = document.createRange();
+      range.selectNodeContents(cellNode);
+      range.collapse(false);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    });
+    cellNode.addEventListener("input", () => {
+      const before = structuredClone(item);
+      normalizeTableData(item);
+      item.table.cells[index].text = cleanUserText(cellNode.textContent, 1000, "");
+      saveState({
+        historyEntry: createHistoryCommand("updateItem", item.id, before, item, {
+          projectId: state.activeProjectId,
+          groupKey: `item:${item.id}:table:${index}`
+        })
+      });
+    });
+    cellNode.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        cellNode.blur();
+      }
+    });
+    cellNode.addEventListener("blur", () => {
+      cellNode.contentEditable = "false";
+    });
+    tableNode.append(cellNode);
+  });
+  return tableNode;
 }
 
 function renderDrawings(project) {

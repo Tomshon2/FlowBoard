@@ -1,6 +1,11 @@
 ﻿function addSelectedShape(selected = "ticket") {
+  if (!isShapeToolAllowedForProject(selected)) return;
   if (selected === "ticket") {
     addBoardItem("ticket");
+    return;
+  }
+  if (selected === "table" || selected === "folder") {
+    addBoardItem("table", createTableItemDefaults(selected));
     return;
   }
   addBoardItem("shape", {
@@ -17,8 +22,9 @@ function addBoardItem(type, extra = {}, options = {}) {
   const project = getActiveProject();
   if (!project) return;
   const isShape = type === "shape";
-  const width = extra.width ?? (type === "image" ? 260 : isShape ? 140 : 230);
-  const height = extra.height ?? (type === "image" ? 220 : 140);
+  const isTable = type === "table";
+  const width = extra.width ?? (type === "image" ? 260 : isTable ? 320 : isShape ? 140 : 230);
+  const height = extra.height ?? (type === "image" ? 220 : isTable ? 220 : 140);
   const position = getNewItemPosition(width, height, extra);
   const item = {
     id: crypto.randomUUID(),
@@ -27,7 +33,7 @@ function addBoardItem(type, extra = {}, options = {}) {
     y: position.y,
     width,
     height,
-    name: type === "image" ? "Imported image" : "New board",
+    name: type === "image" ? "Imported image" : isTable ? (extra.tableKind === "folder" ? "Folder" : "Table") : "New board",
     text: type === "ticket" ? "New board" : "",
     html: type === "ticket" ? "New board" : "",
     shape: isShape ? "circle" : undefined,
@@ -54,6 +60,59 @@ function addBoardItem(type, extra = {}, options = {}) {
     saveState({ projectId: project.id, forceStep: true });
     render();
   }
+}
+
+const designBoardTemplates = {
+  level: {
+    title: "Level Design Board",
+    fields: [
+      "Objetivo do nivel",
+      "Obstaculos",
+      "Inimigos",
+      "Progressao",
+      "Recompensas",
+      "Dificuldade",
+      "Referencias visuais"
+    ]
+  },
+  character: {
+    title: "Character Design Board",
+    fields: [
+      "Nome",
+      "Historia",
+      "Personalidade",
+      "Habilidades",
+      "Animacoes",
+      "Sprites",
+      "Sons",
+      "Referencias"
+    ]
+  }
+};
+
+function addDesignBoardTemplate(kind) {
+  const template = designBoardTemplates[kind];
+  if (!template) return;
+  const rows = template.fields.length + 1;
+  const cells = [
+    { text: template.title },
+    { text: "Notas" },
+    ...template.fields.flatMap((field) => [{ text: field }, { text: "" }])
+  ];
+  addBoardItem("table", {
+    tableKind: "table",
+    name: template.title,
+    width: 560,
+    height: Math.max(300, rows * 58),
+    color: getCreationColor("#fff1b8"),
+    borderColor: "#1d2733",
+    borderThickness: 2,
+    table: {
+      rows,
+      cols: 2,
+      cells
+    }
+  }, { forceHistoryStep: true });
 }
 
 const templateLayouts = {
@@ -530,6 +589,7 @@ function getProportionalResizeFrame(item, origin, direction, dx, dy) {
 
 function startItemResize(event, node, item, project, direction = "se") {
   if (event.type === "mousedown" && event.button !== 0) return;
+  if (spacePressed) return;
   event.preventDefault();
   event.stopImmediatePropagation();
   event.stopPropagation();
@@ -689,7 +749,8 @@ function getBoardPoint(event) {
 function startBoardPan(event) {
   if (event.button !== 0) return;
   if (drawMode && !spacePressed) return;
-  if (event.target.closest(".board-item, .drawer-toggle, .connection-handle")) return;
+  if (!spacePressed && event.target.closest(".board-item, .drawer-toggle, .connection-handle")) return;
+  if (spacePressed && event.target.closest(".drawer-toggle")) return;
   event.preventDefault();
   clearSelection();
   board.classList.add("panning");
@@ -737,8 +798,9 @@ function observeItemResize(node, item, project) {
 function initializeSideDrawerResize() {
   if (!sideDrawer) return;
   const storageKey = "flowboard-side-drawer-width";
-  const getMaxWidth = () => Math.max(340, window.innerWidth - 58);
-  const clampDrawerWidth = (width) => clamp(Math.round(width), 340, getMaxWidth());
+  const minDrawerWidth = 365;
+  const getMaxWidth = () => Math.max(minDrawerWidth, window.innerWidth - 58);
+  const clampDrawerWidth = (width) => clamp(Math.round(width), minDrawerWidth, getMaxWidth());
   const applyWidth = (width) => {
     const drawerWidth = `${clampDrawerWidth(width)}px`;
     sideDrawer.style.setProperty("--side-drawer-width", drawerWidth);
@@ -754,27 +816,32 @@ function initializeSideDrawerResize() {
   const startResize = (handle, drawer, event) => {
     if (event.button !== 0) return;
     event.preventDefault();
+    event.stopPropagation();
     const startX = event.clientX;
     const startWidth = drawer.getBoundingClientRect().width;
     document.body.classList.add("resizing-side-drawer");
-    handle.setPointerCapture(event.pointerId);
+    try {
+      handle.setPointerCapture(event.pointerId);
+    } catch (error) {
+      // Window listeners below keep resizing reliable without pointer capture.
+    }
 
     const move = (moveEvent) => {
-      const nextWidth = startWidth + (startX - moveEvent.clientX);
+      const nextWidth = startWidth + (moveEvent.clientX - startX);
       applyWidth(nextWidth);
     };
 
     const end = () => {
       document.body.classList.remove("resizing-side-drawer");
-      handle.removeEventListener("pointermove", move);
-      handle.removeEventListener("pointerup", end);
-      handle.removeEventListener("pointercancel", end);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", end);
       localStorage.setItem(storageKey, String(clampDrawerWidth(drawer.getBoundingClientRect().width)));
     };
 
-    handle.addEventListener("pointermove", move);
-    handle.addEventListener("pointerup", end);
-    handle.addEventListener("pointercancel", end);
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", end);
+    window.addEventListener("pointercancel", end);
   };
 
   [
@@ -798,6 +865,7 @@ function togglePanel(panel, button) {
 }
 
 function toggleDrawer(drawer) {
+  clearSelection();
   const className = drawer === "workspace" ? "workspace-open" : "side-open";
   window.clearTimeout(drawerSwitchTimer);
   app.classList.remove("drawer-switching");
@@ -829,6 +897,13 @@ function closeDrawer(drawer) {
   syncDrawerButtons();
 }
 
+function closeDrawersForBoardSelection() {
+  window.clearTimeout(drawerSwitchTimer);
+  pendingDrawerTarget = null;
+  app.classList.remove("drawer-switching", "workspace-open", "side-open");
+  syncDrawerButtons();
+}
+
 function syncDrawerButtons() {
   const actualWorkspaceOpen = app.classList.contains("workspace-open");
   const actualSideOpen = app.classList.contains("side-open");
@@ -839,6 +914,8 @@ function syncDrawerButtons() {
   hoursDrawerToggle.setAttribute("aria-expanded", String(sideOpen && targetSidePanel === "hours"));
   tasksDrawerToggle.setAttribute("aria-expanded", String(sideOpen && targetSidePanel === "tasks"));
   storyDrawerToggle.setAttribute("aria-expanded", String(sideOpen && targetSidePanel === "story"));
+  levelDesignDrawerToggle.setAttribute("aria-expanded", String(sideOpen && targetSidePanel === "level-design"));
+  characterDesignDrawerToggle.setAttribute("aria-expanded", String(sideOpen && targetSidePanel === "character-design"));
   teamDrawerToggle.setAttribute("aria-expanded", String(sideOpen && targetSidePanel === "team"));
   milestonesDrawerToggle.setAttribute("aria-expanded", String(sideOpen && targetSidePanel === "milestones"));
   historyDrawerToggle.setAttribute("aria-expanded", String(sideOpen && targetSidePanel === "history"));
@@ -846,6 +923,8 @@ function syncDrawerButtons() {
   hoursDrawerToggle.classList.toggle("active", sideOpen && targetSidePanel === "hours");
   tasksDrawerToggle.classList.toggle("active", sideOpen && targetSidePanel === "tasks");
   storyDrawerToggle.classList.toggle("active", sideOpen && targetSidePanel === "story");
+  levelDesignDrawerToggle.classList.toggle("active", sideOpen && targetSidePanel === "level-design");
+  characterDesignDrawerToggle.classList.toggle("active", sideOpen && targetSidePanel === "character-design");
   teamDrawerToggle.classList.toggle("active", sideOpen && targetSidePanel === "team");
   milestonesDrawerToggle.classList.toggle("active", sideOpen && targetSidePanel === "milestones");
   historyDrawerToggle.classList.toggle("active", sideOpen && targetSidePanel === "history");
@@ -853,7 +932,14 @@ function syncDrawerButtons() {
   sideDrawer.setAttribute("aria-hidden", String(!actualSideOpen));
 }
 
+function getAllowedSidePanel(panelName) {
+  if (!isGameJamProject()) return panelName;
+  return ["hours", "tasks", "story"].includes(panelName) ? panelName : "hours";
+}
+
 function toggleSidePanel(panelName) {
+  clearSelection();
+  panelName = getAllowedSidePanel(panelName);
   const sideOpen = app.classList.contains("side-open");
   if (sideOpen && activeSidePanel === panelName) {
     closeDrawer("side");
@@ -878,11 +964,14 @@ function toggleSidePanel(panelName) {
 }
 
 function openSidePanel(panelName) {
+  panelName = getAllowedSidePanel(panelName);
   activeSidePanel = panelName;
   sideDrawer.dataset.mode = panelName;
   setPanelOpen(hoursPanel, toggleHours, panelName === "hours");
   setPanelOpen(tasksPanel, toggleTasks, panelName === "tasks");
   setPanelOpen(storyPanel, toggleStory, panelName === "story");
+  setPanelOpen(levelDesignPanel, toggleLevelDesign, panelName === "level-design");
+  setPanelOpen(characterDesignPanel, toggleCharacterDesign, panelName === "character-design");
   setPanelOpen(teamPanel, toggleTeam, panelName === "team");
   setPanelOpen(milestonesPanel, toggleMilestones, panelName === "milestones");
   setPanelOpen(historyPanel, toggleHistory, panelName === "history");
