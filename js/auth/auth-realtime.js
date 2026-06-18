@@ -1,16 +1,3 @@
-function getSupabaseClient() {
-  if (supabaseClient) return supabaseClient;
-  if (!window.supabase || !SUPABASE_CONFIG.url || !SUPABASE_CONFIG.anonKey) return null;
-  supabaseClient = window.supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true
-    }
-  });
-  return supabaseClient;
-}
-
 function showApp() {
   authScreen.classList.add("hidden");
   app.classList.remove("hidden");
@@ -33,13 +20,13 @@ async function initializeApp() {
     return;
   }
 
-  const { data, error } = await client.auth.getSession();
+  const { session, error } = await getAuthSession();
   if (error) {
     loginError.textContent = error.message;
     return;
   }
 
-  currentUser = normalizeSupabaseUser(data.session?.user);
+  currentUser = normalizeSupabaseUser(session?.user);
   ensureDisplayName();
   if (!currentUser) {
     authScreen.classList.remove("hidden");
@@ -108,7 +95,7 @@ async function signInOnline() {
   const email = loginEmail.value.trim();
   const password = document.querySelector("#access-code").value;
   try {
-    const { data, error } = await client.auth.signInWithPassword({ email, password });
+    const { data, error } = await signInWithEmailPassword(email, password);
     if (error) throw new Error("Invalid email or password.");
     setAuthSession(data.session);
     await upsertProfile();
@@ -144,13 +131,7 @@ async function signUpOnline() {
   }
 
   try {
-    const { data, error } = await client.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { display_name: currentDisplayName }
-      }
-    });
+    const { data, error } = await signUpWithEmailPassword(email, password, currentDisplayName);
     if (error) throw normalizeAuthError(error);
     if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
       throw new Error("Email already in use.");
@@ -158,7 +139,7 @@ async function signUpOnline() {
 
     let session = data.session;
     if (!session) {
-      const login = await client.auth.signInWithPassword({ email, password });
+      const login = await signInWithEmailPassword(email, password);
       if (login.error) {
         throw new Error("Account created, but Supabase still requires email confirmation. Disable Confirm email in Supabase Auth settings.");
       }
@@ -182,28 +163,12 @@ async function signOut() {
   clearRemoteCursors();
   await saveStateRemoteNow();
   await unsubscribeFromWorkspace();
-  const client = getSupabaseClient();
-  await client?.auth.signOut();
+  await signOutFromSupabase();
   cursorChannelReady = false;
   currentWorkspaceId = null;
   currentUser = null;
   authScreen.classList.remove("hidden");
   app.classList.add("hidden");
-}
-
-function normalizeAuthError(error) {
-  if (/already|registered|exists/i.test(error.message || "")) return new Error("Email already in use.");
-  return error;
-}
-
-function normalizeSupabaseUser(user) {
-  if (!user) return null;
-  const displayName = user.user_metadata?.display_name || user.user_metadata?.name || "";
-  return { id: user.id, email: user.email, displayName };
-}
-
-function getAuthToken() {
-  return "";
 }
 
 function setAuthSession(session) {
@@ -215,14 +180,6 @@ function setAuthSession(session) {
     localStorage.setItem("flowboard-display-name", currentDisplayName);
   }
   ensureDisplayName();
-}
-
-function parseJwtUser() {
-  return null;
-}
-
-async function apiRequest() {
-  throw new Error("This build uses Supabase directly instead of the old backend API.");
 }
 
 function saveDisplayName() {
@@ -370,26 +327,11 @@ async function loadOnlineWorkspace(initialState = {}) {
 }
 
 async function getFirstAvailableWorkspace() {
-  const client = getSupabaseClient();
-  const { data, error } = await client
-    .from("workspace_members")
-    .select("workspace_id, role, workspaces(id, name, state, updated_at, owner_id)")
-    .eq("user_id", currentUser.id)
-    .order("created_at", { ascending: true });
-  if (error) throw error;
-  const row = (data || []).find((membership) => membership.workspaces);
-  return row?.workspaces ? { ...row.workspaces, currentRole: row.role } : null;
+  return fetchFirstWorkspaceForUser(currentUser.id);
 }
 
 async function getWorkspaceById(workspaceId) {
-  const client = getSupabaseClient();
-  const { data, error } = await client
-    .from("workspaces")
-    .select("id, name, state, updated_at, owner_id")
-    .eq("id", workspaceId)
-    .maybeSingle();
-  if (error) throw error;
-  return data;
+  return fetchWorkspaceById(workspaceId);
 }
 
 async function joinWorkspaceByInvite(inviteToken) {
@@ -436,22 +378,12 @@ function applyLoadedWorkspace(workspace) {
 }
 
 async function createOnlineWorkspace(initialState = {}) {
-  const client = getSupabaseClient();
-  const { data: workspace, error: workspaceError } = await client
-    .from("workspaces")
-    .insert({
-      name: SUPABASE_CONFIG.workspaceName || "FlowBoard Team",
-      owner_id: currentUser.id,
-      state: initialState?.projects ? initialState : state
-    })
-    .select("id, name, state, updated_at, owner_id")
-    .single();
-  if (workspaceError) throw workspaceError;
-
-  const { error: memberError } = await client
-    .from("workspace_members")
-    .insert({ workspace_id: workspace.id, user_id: currentUser.id, role: "owner" });
-  if (memberError && memberError.code !== "23505") throw memberError;
+  const workspace = await createWorkspaceRecord(
+    SUPABASE_CONFIG.workspaceName || "FlowBoard Team",
+    currentUser.id,
+    initialState?.projects ? initialState : state
+  );
+  await addWorkspaceOwnerMember(workspace.id, currentUser.id);
 
   currentWorkspaceId = workspace.id;
   currentWorkspaceRole = "owner";
@@ -468,13 +400,8 @@ async function loadWorkspaceMembers() {
   }
 
   try {
-    const { data, error } = await client
-      .from("workspace_members")
-      .select("workspace_id, user_id, role, created_at, profiles(display_name)")
-      .eq("workspace_id", currentWorkspaceId)
-      .order("created_at", { ascending: true });
-    if (error) throw error;
-    workspaceMembers = (data || []).map((member) => ({
+    const members = await fetchWorkspaceMembers(currentWorkspaceId);
+    workspaceMembers = members.map((member) => ({
       workspaceId: member.workspace_id,
       userId: member.user_id,
       role: member.role || "guest",
@@ -499,13 +426,9 @@ async function updateWorkspaceMemberRole(userId, role) {
   if (!allowedRoles.has(role)) return;
   const member = workspaceMembers.find((candidate) => candidate.userId === userId);
   if (!member || member.role === "owner") return;
-  const client = getSupabaseClient();
-  const { error } = await client
-    .from("workspace_members")
-    .update({ role })
-    .eq("workspace_id", currentWorkspaceId)
-    .eq("user_id", userId);
-  if (error) {
+  try {
+    await updateWorkspaceMemberRoleRecord(currentWorkspaceId, userId, role);
+  } catch (error) {
     showRealtimeConflictNotice(error.message || "Could not update member role.");
     return;
   }
@@ -517,13 +440,9 @@ async function removeWorkspaceMember(userId) {
   const member = workspaceMembers.find((candidate) => candidate.userId === userId);
   if (!member || member.role === "owner" || member.userId === currentUser?.id) return;
   if (!await confirmDangerousAction(`Remove ${member.displayName || "this member"} from the workspace?`)) return;
-  const client = getSupabaseClient();
-  const { error } = await client
-    .from("workspace_members")
-    .delete()
-    .eq("workspace_id", currentWorkspaceId)
-    .eq("user_id", userId);
-  if (error) {
+  try {
+    await deleteWorkspaceMemberRecord(currentWorkspaceId, userId);
+  } catch (error) {
     showRealtimeConflictNotice(error.message || "Could not remove member.");
     return;
   }
@@ -533,12 +452,7 @@ async function removeWorkspaceMember(userId) {
 async function acceptWorkspaceInvite(token) {
   const normalizedToken = String(token || "").trim();
   if (!normalizedToken || !currentUser?.id) return null;
-  const client = getSupabaseClient();
-  const { data: workspaceId, error } = await client.rpc("accept_workspace_invite", {
-    invite_token: normalizedToken
-  });
-  if (error) throw error;
-  return workspaceId || null;
+  return acceptWorkspaceInviteToken(normalizedToken);
 }
 
 async function createInviteLink() {
@@ -547,18 +461,9 @@ async function createInviteLink() {
   inviteLink.value = "Creating link...";
   try {
     if (!currentWorkspaceId) throw new Error("Open a workspace before creating an invite.");
-    const client = getSupabaseClient();
     const token = createInviteToken();
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-    const { error } = await client
-      .from("workspace_invites")
-      .insert({
-        token,
-        workspace_id: currentWorkspaceId,
-        created_by: currentUser.id,
-        expires_at: expiresAt
-      });
-    if (error) throw error;
+    await createWorkspaceInviteRecord(token, currentWorkspaceId, currentUser.id, expiresAt);
     logProjectEvent("Member invited", "Workspace invite", currentWorkspaceId);
     saveState({ forceStep: true });
 
@@ -593,24 +498,17 @@ async function copyInviteLink() {
 
 async function saveWorkspaceState() {
   if (!currentWorkspaceId || applyingRemoteState) return;
-  const client = getSupabaseClient();
-  const { error } = await client
-    .from("workspaces")
-    .update({ state, updated_at: new Date().toISOString() })
-    .eq("id", currentWorkspaceId);
-  if (error) throw error;
+  await saveWorkspaceRecordState(currentWorkspaceId, state);
 }
 
 async function subscribeToWorkspace() {
-  const client = getSupabaseClient();
   await unsubscribeFromWorkspace();
-  if (!client || !currentWorkspaceId) return;
+  if (!currentWorkspaceId) return;
 
   cursorChannelReady = false;
   clearRemoteCursors();
-  workspaceChannel = client.channel(`workspace:${currentWorkspaceId}`, {
-    config: { broadcast: { self: false } }
-  });
+  workspaceChannel = createWorkspaceRealtimeChannel(currentWorkspaceId);
+  if (!workspaceChannel) return;
 
   workspaceChannel
     .on("postgres_changes", {
@@ -653,10 +551,7 @@ async function subscribeToWorkspace() {
 }
 
 async function unsubscribeFromWorkspace() {
-  const client = getSupabaseClient();
-  if (client && workspaceChannel) {
-    await client.removeChannel(workspaceChannel);
-  }
+  await removeWorkspaceRealtimeChannel(workspaceChannel);
   workspaceChannel = null;
   cursorChannelReady = false;
 }

@@ -1,0 +1,482 @@
+﻿.team-role-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.workspace-members-card {
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(67, 75, 215, 0.22);
+  border-radius: 8px;
+  background: #f7f6ff;
+  padding: 10px;
+}
+
+.workspace-members-head,
+.workspace-member-row {
+  display: grid;
+  gap: 8px;
+}
+
+.workspace-members-head {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.workspace-members-head h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.workspace-role-badge {
+  border-radius: 999px;
+  background: #e7e9ff;
+  color: var(--accent-dark);
+  padding: 5px 9px;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: capitalize;
+}
+
+.workspace-members-list {
+  display: grid;
+  gap: 8px;
+}
+
+.workspace-member-row {
+  grid-template-columns: minmax(0, 1fr) 112px 30px;
+  align-items: center;
+  border: 1px solid rgba(67, 75, 215, 0.16);
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 8px;
+}
+
+.workspace-member-identity {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.workspace-member-identity strong,
+.workspace-member-identity small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-member-identity small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.presence-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #94a3b8;
+}
+
+.presence-dot.online {
+  background: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.16);
+}
+
+.workspace-member-role {
+  min-height: 34px;
+  padding: 4px 7px;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: capitalize;
+}
+
+.workspace-member-remove {
+  min-height: 30px;
+  width: 30px;
+  padding: 0;
+}
+
+.team-role-card {
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(67, 75, 215, 0.22);
+  border-radius: 8px;
+  background: #f7f6ff;
+  padding: 10px;
+}
+
+.delete-task {
+  min-height: 28px;
+  width: 28px;
+  padding: 0;
+  background: #f2d4d1;
+  color: #7a271a;
+}
+
+.app.app-dark .story-node,
+.app.app-dark .team-role-card {
+  background: #153759;
+  color: white;
+  border-color: rgba(125, 199, 255, 0.38);
+}
+
+.app.app-dark .story-node .story-node {
+  background: rgba(21, 55, 89, 0.72);
+}
+
+.app.app-dark .story-node-title,
+.app.app-dark .story-node-notes,
+.app.app-dark .team-role-head input,
+.app.app-dark .team-role-card textarea {
+  background: #112033;
+  color: white;
+  border-color: rgba(125, 199, 255, 0.28);
+}
+
+.app.app-dark .story-sub-button {
+  background: #dce7ff;
+  color: #1d2733;
+}
+
+.app.app-dark .story-sub-button:hover {
+  background: var(--accent);
+  color: white;
+}
+
+.app.app-dark .delete-task {
+  background: #f2d4d1;
+  color: #7a271a;
+}
+
+.side-panel {
+  background: #f7f6ff;
+}
+
+.side-panel .hours-input-row,
+.side-panel .hours-phase,
+.side-panel .hours-add-form,
+.side-panel .kanban-column,
+.side-panel .design-board-fields span,
+.side-panel .story-node,
+.side-panel .team-role-card {
+  background: #f7f6ff;
+  color: #1d2733;
+  border-color: rgba(199, 210, 254, 0.86);
+}
+
+.side-panel .kanban-card,
+.side-panel .phase-task,
+.side-panel .hours-final-phase,
+.side-panel .story-node-title,
+.side-panel .story-node-notes,
+.side-panel .team-role-head input,
+.side-panel .team-role-card textarea {
+  background: #ffffff;
+  color: #1d2733;
+  border-color: rgba(199, 210, 254, 0.68);
+}
+
+.side-panel .kanban-column-tab {
+  background: #f7f6ff;
+}
+
+.side-panel .kanban-progress-track,
+.side-panel .task-issue-progress-track {
+  background: #dddff8;
+}
+
+.side-panel .kanban-person-chip,
+.side-panel .hours-mode-toggle,
+.side-panel .hours-final-phase-main,
+.side-panel .hours-final-phase-main span,
+.side-panel .phase-hours,
+.side-panel .kanban-count {
+  background: #e7e9ff;
+  color: #3037b8;
+}
+
+.side-panel .kanban-edit-button,
+.side-panel .kanban-icon-button,
+.side-panel .story-sub-button,
+.side-panel .rename-project,
+.side-panel .phase-controls button,
+.side-panel .phase-task button,
+.side-panel .delete-task {
+  background: #ffffff;
+  color: #3037b8;
+  border-color: rgba(199, 210, 254, 0.86);
+}
+
+.side-panel .delete-task,
+.side-panel .kanban-icon-button.delete-task {
+  color: #3037b8;
+}
+
+.app.app-dark .side-panel {
+  background: var(--panel);
+}
+
+.app.app-dark .side-panel .hours-input-row,
+.app.app-dark .side-panel .hours-phase,
+.app.app-dark .side-panel .hours-add-form,
+.app.app-dark .side-panel .kanban-column,
+.app.app-dark .side-panel .design-board-fields span,
+.app.app-dark .side-panel .milestone-card,
+.app.app-dark .side-panel .gdd-fields,
+.app.app-dark .side-panel .workspace-members-card,
+.app.app-dark .side-panel .workspace-member-row,
+.app.app-dark .side-panel .story-node,
+.app.app-dark .side-panel .team-role-card {
+  background: var(--dark-panel-card);
+  color: white;
+  border-color: var(--dark-panel-line);
+}
+
+.app.app-dark .side-panel .kanban-card,
+.app.app-dark .side-panel .phase-task,
+.app.app-dark .side-panel .hours-final-phase,
+.app.app-dark .side-panel .story-node-title,
+.app.app-dark .side-panel .story-node-notes,
+.app.app-dark .side-panel .team-role-head input,
+.app.app-dark .side-panel .team-role-card textarea,
+.app.app-dark .side-panel .gdd-fields input,
+.app.app-dark .side-panel .gdd-fields textarea,
+.app.app-dark .side-panel .gdd-character-card,
+.app.app-dark .side-panel .gdd-add-character,
+.app.app-dark .side-panel .gdd-character-delete,
+.app.app-dark .side-panel .milestone-name-input,
+.app.app-dark .side-panel .milestone-description,
+.app.app-dark .side-panel .milestone-deadline-input,
+.app.app-dark .side-panel .workspace-member-role,
+.app.app-dark .side-panel .hours-input-row input,
+.app.app-dark .side-panel .hours-add-form input,
+.app.app-dark .side-panel .phase-name input,
+.app.app-dark .side-panel .phase-percent input,
+.app.app-dark .side-panel .hour-task-title,
+.app.app-dark .side-panel .hour-task-percent,
+.app.app-dark .side-panel .kanban-card-form input {
+  background: var(--dark-panel-field);
+  color: white;
+  border-color: var(--dark-panel-line);
+}
+
+.app.app-dark .side-panel .kanban-column-tab {
+  background: #f7f6ff;
+}
+
+.app.app-dark .side-panel .kanban-tab-delete {
+  background: #f7f6ff;
+  color: #3037b8;
+}
+
+.app.app-dark .side-panel .kanban-tab-grip {
+  background: #9b9df6;
+}
+
+.app.app-dark .side-panel .kanban-progress-track,
+.app.app-dark .side-panel .task-issue-progress-track {
+  background: #465366;
+}
+
+.app.app-dark .side-panel .kanban-person-chip {
+  background: #313b53;
+  color: white;
+}
+
+.app.app-dark .side-panel .milestone-task-option,
+.app.app-dark .side-panel .milestone-task-option span {
+  color: white;
+}
+
+.app.app-dark .side-panel .milestone-status-options button {
+  background: var(--dark-panel-field);
+  color: white;
+  border-color: var(--dark-panel-line);
+}
+
+.app.app-dark .side-panel .milestone-status-options button.active {
+  background: var(--segment-color, var(--accent));
+  color: white;
+  border-color: var(--segment-color, var(--accent));
+}
+
+.app.app-dark .side-panel .hours-mode-toggle,
+.app.app-dark .side-panel .hours-final-phase-main,
+.app.app-dark .side-panel .hours-final-phase-main span,
+.app.app-dark .side-panel .phase-hours,
+.app.app-dark .side-panel .kanban-count {
+  background: #29346c;
+  color: white;
+}
+
+.app.app-dark .side-panel .counter,
+.app.app-dark .side-panel .timer-label {
+  background: #e7ecff;
+  color: #101827;
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
+}
+
+.app.app-dark .side-panel .kanban-actions-toggle,
+.app.app-dark .side-panel .kanban-data-actions button,
+.app.app-dark .side-panel .import-chip {
+  background: var(--dark-panel-field);
+  color: white;
+  border-color: var(--dark-panel-line);
+}
+
+.app.app-dark .side-panel .kanban-actions-toggle.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.app.app-dark .side-panel .phase-name,
+.app.app-dark .side-panel .hours-input-row label,
+.app.app-dark .side-panel .hours-final-task,
+.app.app-dark .side-panel .phase-task strong,
+.app.app-dark .side-panel .phase-task span {
+  color: white;
+}
+
+.app.app-dark .side-panel .kanban-edit-button,
+.app.app-dark .side-panel .story-sub-button,
+.app.app-dark .side-panel .rename-project {
+  background: var(--dark-panel-field);
+  color: white;
+  border-color: var(--dark-panel-line);
+}
+
+.app.app-dark .side-panel .delete-task,
+.app.app-dark .side-panel .kanban-icon-button.delete-task,
+.app.app-dark .side-panel .phase-controls button,
+.app.app-dark .side-panel .phase-task button {
+  background: #f2d4d1;
+  color: #7a271a;
+  border-color: rgba(242, 212, 209, 0.8);
+}
+
+.app.app-dark .side-panel .kanban-card-form button,
+.app.app-dark .side-panel .hours-add-form button,
+.app.app-dark .side-panel .team-role-form button,
+.app.app-dark .side-panel #story-root-form button {
+  background: var(--accent);
+  color: white;
+}
+
+.delete-confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  background: rgba(18, 23, 34, 0.48);
+  backdrop-filter: blur(8px);
+}
+
+.realtime-conflict-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  z-index: 3200;
+  width: min(520px, calc(100vw - 32px));
+  transform: translateX(-50%);
+  border: 1px solid rgba(207, 63, 47, 0.32);
+  border-radius: 8px;
+  background: #fff7ed;
+  color: #7a271a;
+  padding: 14px 16px;
+  box-shadow: 0 18px 44px rgba(18, 23, 34, 0.2);
+  font-weight: 900;
+  text-align: center;
+}
+
+.delete-confirm-dialog {
+  width: min(420px, 100%);
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 16px;
+  padding: 22px;
+  background: #ffffff;
+  color: #1d2733;
+  border: 1px solid rgba(199, 210, 254, 0.78);
+  border-radius: 8px;
+  box-shadow: 0 24px 70px rgba(18, 23, 34, 0.28);
+}
+
+.delete-confirm-icon {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: #f2d4d1;
+  color: #7a271a;
+  font-size: 28px;
+  font-weight: 800;
+}
+
+.delete-confirm-copy h2 {
+  margin: 4px 0 8px;
+  font-size: 22px;
+}
+
+.delete-confirm-copy p:last-child {
+  margin: 0;
+  color: #5f6875;
+  line-height: 1.45;
+}
+
+.delete-confirm-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.delete-confirm-actions button {
+  min-width: 96px;
+  border-radius: 8px;
+  border: 1px solid rgba(199, 210, 254, 0.86);
+  padding: 10px 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.delete-confirm-cancel {
+  background: #ffffff;
+  color: #3037b8;
+}
+
+.delete-confirm-delete {
+  background: #cf3f2f;
+  color: #ffffff;
+  border-color: #cf3f2f;
+}
+
+.app.app-dark ~ .delete-confirm-backdrop .delete-confirm-dialog,
+body:has(.app.app-dark) .delete-confirm-dialog {
+  background: var(--dark-panel-card);
+  color: #ffffff;
+  border-color: var(--dark-panel-line);
+}
+
+.app.app-dark ~ .delete-confirm-backdrop .delete-confirm-copy p:last-child,
+body:has(.app.app-dark) .delete-confirm-copy p:last-child {
+  color: #d7ddeb;
+}
+
+.app.app-dark ~ .delete-confirm-backdrop .delete-confirm-cancel,
+body:has(.app.app-dark) .delete-confirm-cancel {
+  background: var(--dark-panel-field);
+  color: #ffffff;
+  border-color: var(--dark-panel-line);
+}
+

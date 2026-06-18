@@ -12,6 +12,7 @@ FlowBoard is a visual collaborative planning tool for small game-development tea
 - Project-hour planning by phase and task.
 - Game story sections with nested subdivisions.
 - Team role notes and task assignees.
+- Per-project code workspace with file import, editing, download, and local analysis.
 - Realtime board updates and live cursors through Supabase.
 - Image upload through Supabase Storage when configured.
 - Project/task export and import through JSON, CSV, PNG, and printable PDF reports.
@@ -25,20 +26,19 @@ FlowBoard is a visual collaborative planning tool for small game-development tea
 ## Project Structure
 
 - `index.html`: application shell and panels.
-- `styles.css`: full visual styling.
+- `styles.css`: CSS entry point that imports the split files in `styles/`.
+- `styles/`: base, layout, auth, board, tasks, hours, story, team, modal, and responsive styles.
 - `config.js`: Supabase project URL and publishable key.
 - `supabase-schema.sql`: database tables, RLS policies, realtime setup, and Storage bucket.
-- `js/app-core.js`: shared state, DOM references, setup, and event wiring.
-- `js/auth-realtime.js`: login, signup, profiles, workspaces, invites, saving, and realtime.
-- `js/state-history.js`: state normalization, local persistence, undo, and redo.
-- `js/render-board.js`: board rendering, project list, items, and property panels.
-- `js/board-tools.js`: drawing, selection tools, shapes, and connections.
-- `js/items-interactions.js`: item creation, image import/upload, clipboard, drag/drop, zoom, and drawers.
-- `js/selection-projects.js`: project actions, selection, deletion, keyboard handling, and resize persistence.
-- `js/tasks-hours.js`: task board and hour-planning panels.
-- `js/story-team.js`: game story tree and team roles.
-- `js/text-utils.js`: text formatting, sanitizing, validation helpers, and small utilities.
-- `js/bootstrap.js`: startup.
+- `js/core/`: defaults, shared state, DOM references, setup, history, and startup.
+- `js/auth/`: login, signup, profiles, workspaces, invites, saving, and realtime.
+- `js/board/`: board rendering, tools, shapes, drawings, connections, items, selection, and project actions.
+- `js/tasks/`: task board and hour-planning panels.
+- `js/code/`: project code files, editor controls, and local analysis.
+- `js/story/`: game story tree and GDD fields.
+- `js/team/`: team roles and workspace member display.
+- `js/services/`: Supabase client setup, Storage upload helpers, and export/import.
+- `js/utils/`: text formatting, sanitizing, validation helpers, and small utilities.
 
 ## Configure Supabase
 

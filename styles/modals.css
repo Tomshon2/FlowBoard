@@ -1,0 +1,247 @@
+﻿.app.app-dark .drawer,
+.app.app-dark .properties-panel,
+.app.app-dark .task-issue-dialog,
+.app.app-dark .task-issue-sidebar {
+  background: var(--panel);
+  color: var(--ink);
+  border-color: var(--line);
+}
+
+.app.app-dark .task-issue-main,
+.app.app-dark .task-issue-title,
+.app.app-dark .task-issue-title:focus {
+  background: var(--panel);
+  color: var(--ink);
+}
+
+.app.app-dark .task-issue-segmented button {
+  background: var(--dark-panel-field);
+  color: white;
+  border-color: var(--dark-panel-line);
+}
+
+.app.app-dark .task-issue-segmented button.active {
+  background: var(--segment-color, var(--accent));
+  color: white;
+  border-color: var(--segment-color, var(--accent));
+}
+
+.app.app-dark .properties-linked-task-open,
+.app.app-dark .properties-linked-task-go,
+.app.app-dark .task-issue-go-board,
+.app.app-dark .board-linked-tasks,
+.app.app-dark .text-style-controls button,
+.app.app-dark .format-panel button {
+  background: #182235;
+  color: #f8fafc;
+  border-color: var(--line);
+}
+
+.app.app-dark .text-style-controls button:hover,
+.app.app-dark .format-panel button:hover {
+  background: #243149;
+  color: #ffffff;
+}
+
+.app.app-dark .text-style-controls button.active,
+.app.app-dark .format-panel button.active {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.app.app-dark .task-issue-save {
+  box-shadow: 0 -12px 24px rgba(20, 29, 45, 0.94);
+}
+
+.app.app-dark .project-item,
+.app.app-dark .projects-empty-state,
+.app.app-dark .invite-panel,
+.app.app-dark .empty-panel-copy,
+.app.app-dark .hours-final-phase,
+.app.app-dark .kanban-column,
+.app.app-dark .kanban-card,
+.app.app-dark .story-node,
+.app.app-dark .team-role,
+.app.app-dark .connection-style-panel,
+.app.app-dark .color-panel,
+.app.app-dark .format-panel {
+  background: var(--panel-soft);
+  color: var(--ink);
+  border-color: var(--line);
+}
+
+.app.app-dark .project-item.active,
+.app.app-dark .kanban-cards.drag-over {
+  background: rgba(67, 75, 215, 0.26);
+  border-color: var(--accent);
+}
+
+.app.app-dark .topbar .file-button,
+.app.app-dark .topbar .template-select,
+.app.app-dark .topbar .shape-tool,
+.app.app-dark .topbar .shape-menu-toggle,
+.app.app-dark .topbar .shape-menu,
+.app.app-dark .ghost-button,
+.app.app-dark .collapse-button,
+.app.app-dark .kanban-icon-button,
+.app.app-dark .kanban-edit-button,
+.app.app-dark .kanban-people-picker summary,
+.app.app-dark .task-issue-close {
+  background: #182235;
+  color: var(--ink);
+  border-color: var(--line);
+}
+
+.app.app-dark .topbar .file-button:hover,
+.app.app-dark .topbar .template-select:hover,
+.app.app-dark .topbar .template-select:focus,
+.app.app-dark .topbar .shape-tool:hover,
+.app.app-dark .topbar .shape-tool.active,
+.app.app-dark .topbar .shape-menu-toggle:hover,
+.app.app-dark .topbar .shape-menu-toggle.active,
+.app.app-dark .ghost-button:hover,
+.app.app-dark .ghost-button.active,
+.app.app-dark .collapse-button:hover,
+.app.app-dark .kanban-icon-button:hover,
+.app.app-dark .kanban-edit-button:hover {
+  background: var(--accent);
+  color: white;
+}
+
+.app.app-dark .hours-final-phase-main,
+.app.app-dark .phase-hours,
+.app.app-dark .kanban-count,
+.app.app-dark .hours-mode-toggle {
+  background: rgba(67, 75, 215, 0.28);
+  color: var(--ink);
+}
+
+.app.app-dark .hours-mode-toggle button.active {
+  background: var(--accent);
+  color: white;
+}
+
+.app.app-dark .hours-mode-toggle button {
+  color: #dbe7ff;
+}
+
+.app.app-dark .hours-mode-toggle button:not(.active) {
+  color: #cbd5e1;
+  opacity: 1;
+}
+
+.app.app-dark .hours-final-task:nth-child(even),
+.app.app-dark .phase-task:nth-child(even),
+.app.app-dark .kanban-person-chip {
+  background: rgba(67, 75, 215, 0.18);
+  color: var(--ink);
+}
+
+.app.app-dark .hours-input-row {
+  background: #fff1b8;
+  color: #1d2733;
+  border-color: rgba(255, 241, 184, 0.82);
+}
+
+.app.app-dark .hours-input-row label {
+  color: var(--accent-dark);
+}
+
+.app.app-dark .hours-phase,
+.app.app-dark .hours-add-form {
+  background: #eeedff;
+  color: #1d2733;
+  border-color: rgba(199, 210, 254, 0.86);
+}
+
+.app.app-dark .phase-name,
+.app.app-dark .phase-hours {
+  color: #3037b8;
+}
+
+.app.app-dark .phase-task {
+  background: #182235;
+  color: white;
+  border-color: rgba(199, 210, 254, 0.24);
+}
+
+.app.app-dark .phase-task:nth-child(even) {
+  background: #1f2a44;
+  color: white;
+}
+
+.app.app-dark .phase-task strong,
+.app.app-dark .phase-task span {
+  color: white;
+}
+
+.app.app-dark .phase-handle {
+  background: #e7e9ff;
+}
+
+.app.app-dark .phase-handle span {
+  background: #9b9df6;
+}
+
+.app.app-dark .rename-project {
+  background: #e7e9ff;
+  color: #1d2733;
+}
+
+.app.app-dark .favorite-project {
+  background: #182235;
+  color: #dbe7ff;
+  border-color: var(--line);
+}
+
+.app.app-dark .favorite-project.active {
+  background: #fff1b8;
+  color: #8a5a00;
+}
+
+.app.app-dark .project-select small {
+  color: #a7b0c0;
+}
+
+.app.app-dark .compact-form select {
+  background:
+    linear-gradient(45deg, transparent 50%, currentColor 50%) right 14px center / 5px 5px no-repeat,
+    linear-gradient(135deg, currentColor 50%, transparent 50%) right 9px center / 5px 5px no-repeat,
+    #0f1724;
+  color: var(--ink);
+  border-color: var(--line);
+}
+
+.app.app-dark .rename-project:hover {
+  background: var(--accent);
+  color: white;
+}
+
+.app.app-dark .delete-project {
+  background: #f2d4d1;
+  color: #7a271a;
+}
+
+.app.app-dark .kanban-progress-track,
+.app.app-dark .task-issue-progress-track {
+  background: rgba(226, 232, 240, 0.16);
+}
+
+.app.app-dark .task-issue-progress-range::-moz-range-track {
+  background: rgba(226, 232, 240, 0.22);
+}
+
+.app.app-dark .task-issue-backdrop {
+  background: rgba(2, 6, 23, 0.72);
+}
+
+.empty-panel-copy {
+  margin: 0;
+  border: 1px dashed rgba(67, 75, 215, 0.32);
+  border-radius: 8px;
+  background: #f7f6ff;
+  color: var(--muted);
+  padding: 12px;
+  line-height: 1.4;
+}
+

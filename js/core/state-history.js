@@ -163,6 +163,17 @@ function normalizeState() {
       role: String(member.role || "Team role"),
       notes: String(member.notes || "")
     }));
+    const codeLanguages = new Set(["plaintext", "javascript", "typescript", "json", "html", "css", "python", "csharp", "cpp", "java", "gdscript", "sql", "markdown"]);
+    project.codeFiles = (Array.isArray(project.codeFiles) ? project.codeFiles : []).slice(0, 60).map((file, index) => ({
+      id: file.id || crypto.randomUUID(),
+      name: String(file.name || `untitled-${index + 1}.txt`).slice(0, 180),
+      language: codeLanguages.has(file.language) ? file.language : "plaintext",
+      content: String(file.content || ""),
+      modifiedAt: Number(file.modifiedAt) || 0
+    }));
+    project.activeCodeFileId = project.codeFiles.some((file) => file.id === project.activeCodeFileId)
+      ? project.activeCodeFileId
+      : project.codeFiles[0]?.id || "";
     project.drawings = (project.drawings || []).map((drawing) => ({
       id: drawing.id || crypto.randomUUID(),
       color: normalizeHexColor(drawing.color, DEFAULT_CONNECTION_COLOR),
@@ -286,7 +297,7 @@ function recordHistoryChange(options = {}) {
 // History is hybrid:
 // - Normal local edits store compact command entries: { type, targetId, before, after }.
 // - Large/ambiguous edits fall back to a full JSON snapshot entry.
-// - saveState()/commitState() still own persistence, timestamps, localStorage, and backend sync.
+// - saveState()/commitState() still own persistence, timestamps, localStorage, and Supabase sync.
 function pushHistoryEntry(entry, options = {}) {
   const now = Date.now();
   const previous = undoStack[undoStack.length - 1];

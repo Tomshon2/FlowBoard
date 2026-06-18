@@ -3,11 +3,18 @@ const fs = require("fs");
 const path = require("path");
 
 const root = path.resolve(__dirname, "..");
+
+function listJavaScriptFiles(directory) {
+  return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const entryPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) return listJavaScriptFiles(entryPath);
+    return entry.isFile() && entry.name.endsWith(".js") ? [entryPath] : [];
+  });
+}
+
 const files = [
   path.join(root, "config.js"),
-  ...fs.readdirSync(path.join(root, "js"))
-    .filter((name) => name.endsWith(".js"))
-    .map((name) => path.join(root, "js", name)),
+  ...listJavaScriptFiles(path.join(root, "js")),
   path.join(root, "server", "static-server.js")
 ];
 

@@ -1,0 +1,381 @@
+﻿.hours-panel,
+.tasks-panel,
+.code-panel,
+.story-panel,
+.design-board-panel,
+.team-panel,
+.milestones-panel,
+.history-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.side-panel .hours-panel,
+.side-panel .tasks-panel,
+.side-panel .code-panel,
+.side-panel .story-panel,
+.side-panel .design-board-panel,
+.side-panel .team-panel,
+.side-panel .milestones-panel,
+.side-panel .history-panel {
+  display: none;
+}
+
+.side-panel[data-mode="hours"] .hours-panel,
+.side-panel[data-mode="tasks"] .tasks-panel,
+.side-panel[data-mode="code"] .code-panel,
+.side-panel[data-mode="story"] .story-panel,
+.side-panel[data-mode="level-design"] .design-board-panel#level-design-panel,
+.side-panel[data-mode="character-design"] .design-board-panel#character-design-panel,
+.side-panel[data-mode="team"] .team-panel,
+.side-panel[data-mode="milestones"] .milestones-panel,
+.side-panel[data-mode="history"] .history-panel {
+  display: grid;
+}
+
+.timer-label,
+.counter {
+  border-radius: 999px;
+  background: #eef2f6;
+  color: var(--ink);
+  padding: 5px 9px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.hours-input-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  background: #fdf1cc;
+}
+
+.hours-input-row label {
+  font-weight: 900;
+  color: var(--accent);
+}
+
+.hours-input-row input {
+  width: 100%;
+  font-weight: 800;
+}
+
+.hours-mode-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  border: 1px solid rgba(67, 75, 215, 0.22);
+  border-radius: 8px;
+  background: #eeedff;
+  padding: 5px;
+}
+
+.hours-mode-toggle button {
+  min-height: 36px;
+  background: transparent;
+  color: var(--accent-dark);
+}
+
+.hours-mode-toggle button.active {
+  background: var(--accent);
+  color: white;
+  box-shadow: 0 6px 14px rgba(67, 75, 215, 0.18);
+}
+
+.design-board-create {
+  width: 100%;
+  justify-content: center;
+  min-height: 42px;
+  border: 1px solid rgba(67, 75, 215, 0.24);
+  border-radius: 8px;
+  background: #434bd7;
+  color: white;
+  font-weight: 900;
+}
+
+.design-board-fields {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.design-board-fields span {
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  border: 1px solid rgba(67, 75, 215, 0.18);
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1d2733;
+  padding: 8px 10px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.hours-table {
+  display: grid;
+  gap: 8px;
+}
+
+.hours-final-phase {
+  overflow: hidden;
+  border: 1px solid rgba(67, 75, 215, 0.22);
+  border-radius: 8px;
+  background: #f7f6ff;
+  box-shadow: 0 6px 16px rgba(28, 39, 52, 0.06);
+}
+
+.hours-final-phase-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 50px;
+  padding: 10px 12px;
+  background: rgba(67, 75, 215, 0.12);
+  color: var(--accent-dark);
+}
+
+.hours-final-phase-main strong,
+.hours-final-task span {
+  overflow-wrap: anywhere;
+}
+
+.hours-final-phase-main span {
+  border-radius: 999px;
+  background: #e7e9ff;
+  padding: 5px 9px;
+  font-weight: 900;
+}
+
+.hours-final-tasks {
+  display: grid;
+}
+
+.hours-final-task {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 38px;
+  padding: 8px 12px;
+  border-top: 1px solid rgba(67, 75, 215, 0.14);
+  font-weight: 800;
+}
+
+.hours-final-task:nth-child(even) {
+  background: rgba(67, 75, 215, 0.06);
+}
+
+.hours-phase {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) 88px 68px auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(67, 75, 215, 0.28);
+  border-radius: 8px;
+  background: #f0efff;
+  color: var(--ink);
+  font-weight: 800;
+  padding: 8px;
+  box-shadow: 0 6px 16px rgba(28, 39, 52, 0.06);
+}
+
+.phase-handle {
+  width: 24px;
+  height: 58px;
+  border-radius: 8px;
+  background: rgba(67, 75, 215, 0.12);
+  display: grid;
+  place-items: center;
+  cursor: grab;
+  touch-action: none;
+}
+
+.phase-handle:active {
+  cursor: grabbing;
+}
+
+.phase-handle span {
+  width: 3px;
+  height: 34px;
+  border-radius: 999px;
+  background: rgba(67, 75, 215, 0.48);
+}
+
+.phase-name,
+.phase-hours,
+.phase-task {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 8px;
+  text-align: center;
+  border-right: 1px solid rgba(67, 75, 215, 0.2);
+}
+
+.phase-name {
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+  background: transparent;
+  color: var(--accent-dark);
+}
+
+.phase-name input,
+.phase-percent input,
+.hour-task-title,
+.hour-task-percent {
+  width: 100%;
+  min-height: 36px;
+  font-weight: 900;
+}
+
+.phase-percent {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px;
+}
+
+.phase-hours {
+  font-size: 18px;
+  background: rgba(67, 75, 215, 0.09);
+  color: var(--accent-dark);
+  border-radius: 8px;
+  border-right: 0;
+}
+
+.phase-controls {
+  display: flex;
+  gap: 4px;
+}
+
+.phase-controls button,
+.phase-task button {
+  width: 28px;
+  min-height: 28px;
+  padding: 0;
+}
+
+.phase-tasks {
+  display: grid;
+  gap: 4px;
+  margin: -4px 0 8px 38px;
+  border-left: 3px solid rgba(67, 75, 215, 0.18);
+  padding-left: 10px;
+}
+
+.phase-task {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 76px 48px 28px;
+  gap: 8px;
+  border: 1px solid rgba(67, 75, 215, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.58);
+  font-size: 15px;
+  cursor: grab;
+  transition: opacity 120ms ease, transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
+  user-select: none;
+  touch-action: none;
+}
+
+.phase-task input {
+  cursor: grab;
+}
+
+.phase-task input:focus {
+  cursor: text;
+}
+
+.hour-task-indent {
+  width: 10px;
+  height: 28px;
+  border-left: 3px solid rgba(67, 75, 215, 0.2);
+  border-radius: 999px;
+}
+
+.dragging-hour-plan,
+.dragging-hour-plan * {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+
+.dragging-hour-phase {
+  opacity: 0.48;
+  transform: scale(0.992);
+  box-shadow: 0 18px 34px rgba(31, 41, 55, 0.16);
+}
+
+.dragging-hour-phase-tasks {
+  opacity: 0.36;
+}
+
+.dragging-hour-task {
+  opacity: 0.5;
+  transform: scale(0.99);
+  background: rgba(67, 75, 215, 0.12);
+  box-shadow: 0 14px 28px rgba(31, 41, 55, 0.14);
+}
+
+.phase-task:nth-child(even) {
+  background: rgba(67, 75, 215, 0.08);
+}
+
+.phase-task span {
+  overflow-wrap: anywhere;
+}
+
+.phase-task strong {
+  white-space: nowrap;
+}
+
+.hours-add-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 88px auto;
+  gap: 8px;
+  border: 1px dashed rgba(67, 75, 215, 0.3);
+  border-radius: 8px;
+  padding: 8px;
+  background: #f7f6ff;
+}
+
+.hours-add-form input {
+  min-height: 38px;
+  font-weight: 800;
+}
+
+.hour-task-form {
+  margin-top: 4px;
+}
+
+.task-item {
+  display: grid;
+  grid-template-columns: 22px 1fr 28px;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  background: var(--panel-soft);
+}
+
+.task-item input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+}
+
+.task-item.done .task-text {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.task-text {
+  overflow-wrap: anywhere;
+}
+
