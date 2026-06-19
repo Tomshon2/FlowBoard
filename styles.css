@@ -8,4 +8,7 @@
 @import url("styles/story.css");
 @import url("styles/team.css");
 @import url("styles/code.css");
+@import url("styles/level-workspace.css");
+@import url("styles/character-workspace.css");
+@import url("styles/selects.css");
 @import url("styles/responsive.css");

@@ -13,6 +13,22 @@ function setShapeMenuOpen(open) {
   shapeMenuToggle?.setAttribute("aria-expanded", String(open));
 }
 
+function syncGameJamColorPalette() {
+  if (!gameJamColorToggle || !gameJamColorButtons) return;
+  const allowedColors = Array.from(gameJamColorButtons, (button) => normalizeHexColor(button.dataset.gamejamColor, ticketColors[0]));
+  let selectedColor = normalizeHexColor(createColor?.value, allowedColors[0]);
+  if (isGameJamProject() && !allowedColors.includes(selectedColor)) {
+    selectedColor = allowedColors[0];
+    createColor.value = selectedColor;
+  }
+  gameJamColorToggle.style.setProperty("--selected-color", selectedColor);
+  gameJamColorButtons.forEach((button) => {
+    const selected = normalizeHexColor(button.dataset.gamejamColor, "") === selectedColor;
+    button.classList.toggle("selected", selected);
+    button.setAttribute("aria-pressed", String(selected));
+  });
+}
+
 function startShapePlacement(event) {
   if (!activeShapeTool || event.button !== 0 || event.shiftKey || spacePressed) return;
   if (!isShapeToolAllowedForProject(activeShapeTool)) {
@@ -34,12 +50,15 @@ function startShapePlacement(event) {
 
   const move = (moveEvent) => {
     moveEvent.preventDefault();
-    updateAreaSelectionBox(origin, getPlacementPoint(moveEvent), preview);
+    const target = getPlacementPoint(moveEvent);
+    updateAreaSelectionBox(origin, activeShapeTool === "square" ? getSquarePlacementPoint(origin, target) : target, preview);
   };
 
   const end = (endEvent) => {
     move(endEvent);
-    const bounds = getBoundsFromPoints(origin, getPlacementPoint(endEvent));
+    const target = getPlacementPoint(endEvent);
+    const finalTarget = activeShapeTool === "square" ? getSquarePlacementPoint(origin, target) : target;
+    const bounds = getBoundsFromPoints(origin, finalTarget);
     preview.remove();
     window.removeEventListener("pointermove", move);
     window.removeEventListener("pointerup", end);
@@ -63,6 +82,16 @@ function createShapePlacementPreview(tool) {
     preview.append(createShapeVisual(tool, getCreationColor()));
   }
   return preview;
+}
+
+function getSquarePlacementPoint(origin, target) {
+  const deltaX = target.x - origin.x;
+  const deltaY = target.y - origin.y;
+  const size = Math.max(Math.abs(deltaX), Math.abs(deltaY));
+  return {
+    x: origin.x + (deltaX < 0 ? -size : size),
+    y: origin.y + (deltaY < 0 ? -size : size)
+  };
 }
 
 function createItemFromPlacement(tool, bounds) {

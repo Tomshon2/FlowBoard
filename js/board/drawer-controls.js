@@ -192,6 +192,11 @@ function openSidePanel(panelName) {
   setPanelOpen(historyPanel, toggleHistory, panelName === "history");
   app.classList.remove("workspace-open");
   app.classList.add("side-open");
+  if (panelName === "level-design") {
+    window.requestAnimationFrame(() => renderLevelWorkspaces());
+  } else if (panelName === "character-design") {
+    window.requestAnimationFrame(() => renderCharacterWorkspaces());
+  }
   if (!wasSideOpen || previousPanel !== panelName) {
     sidePanelLayoutSettlesAt = Date.now() + DRAWER_SWITCH_MS;
   }

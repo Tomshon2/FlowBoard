@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>FlowBoard</title>
-    <link rel="icon" type="image/png" href="Flow_Board_logo_clean.png" />
+    <link rel="icon" type="image/png" href="Flow_Board.png" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -32,7 +32,7 @@
           <div class="auth-wave auth-wave-two" aria-hidden="true"></div>
           <div class="auth-wave auth-wave-three" aria-hidden="true"></div>
           <div class="auth-brand-content">
-            <img class="auth-logo" src="Flow_Board_logo_clean.png" alt="FlowBoard logo" />
+            <img class="auth-logo" src="Flow_Board.png" alt="FlowBoard logo" />
             <h1>FlowBoard</h1>
             <p id="auth-brand-copy">New here? Create an account and start your own board.</p>
             <div class="auth-mode-tabs" aria-label="Authentication mode">
@@ -101,25 +101,14 @@
         <div id="workspace-drawer-resize" class="drawer-resize-handle" role="separator" aria-orientation="vertical" aria-label="Resize workspace panel"></div>
         <div class="brand-row">
           <div class="brand-identity">
-            <img class="brand-logo" src="Flow_Board_logo_clean.png" alt="FlowBoard logo" />
+            <img class="brand-logo" src="Flow_Board.png" alt="FlowBoard logo" />
             <div>
               <h2>FlowBoard</h2>
             </div>
           </div>
           <div class="brand-actions">
             <button id="close-workspace-drawer" class="icon-text small ghost-button drawer-internal-close" type="button">&lt;</button>
-            <button id="invite-btn" class="icon-text small" type="button">Invite</button>
-            <button id="logout-btn" class="icon-text small">Log out</button>
           </div>
-        </div>
-
-        <div id="invite-panel" class="invite-panel hidden">
-          <label for="invite-link">Invite link</label>
-          <div class="invite-row">
-            <input id="invite-link" type="text" readonly />
-            <button id="copy-invite-btn" class="small" type="button">Copy</button>
-          </div>
-          <p id="invite-status" class="muted"></p>
         </div>
 
         <form id="project-form" class="compact-form">
@@ -242,7 +231,7 @@
       <section class="workspace">
         <header class="topbar">
           <div class="topbar-title">
-            <img class="topbar-logo" src="Flow_Board_transparent.png" alt="FlowBoard logo" />
+            <img class="topbar-logo" src="Flow_Board.png" alt="FlowBoard logo" />
             <div class="topbar-project-copy">
               <p class="eyebrow">Active project</p>
               <h1 id="active-project-title">No project</h1>
@@ -254,12 +243,31 @@
               <input id="image-input" type="file" accept="image/*" />
             </label>
             <input id="create-color" class="create-color-picker" type="color" value="#fff1b8" title="Creation color" aria-label="Creation color" />
+            <div id="gamejam-color-control" class="gamejam-color-control">
+              <button id="gamejam-color-toggle" class="gamejam-color-toggle" type="button" title="Creation color" aria-label="Choose creation color" aria-expanded="false" aria-controls="gamejam-color-palette"></button>
+              <div id="gamejam-color-palette" class="gamejam-color-palette hidden" aria-label="Game Jam colors">
+                <button type="button" data-gamejam-color="#ef233c" style="--swatch-color:#ef233c" aria-label="Red"></button>
+                <button type="button" data-gamejam-color="#ff922b" style="--swatch-color:#ff922b" aria-label="Orange"></button>
+                <button type="button" data-gamejam-color="#ffe81a" style="--swatch-color:#ffe81a" aria-label="Yellow"></button>
+                <button type="button" data-gamejam-color="#16a34a" style="--swatch-color:#16a34a" aria-label="Green"></button>
+                <button type="button" data-gamejam-color="#303f9f" style="--swatch-color:#303f9f" aria-label="Blue"></button>
+                <button type="button" data-gamejam-color="#6b2ca0" style="--swatch-color:#6b2ca0" aria-label="Purple"></button>
+                <button type="button" data-gamejam-color="#111827" style="--swatch-color:#111827" aria-label="Black"></button>
+                <button type="button" data-gamejam-color="#ffffff" style="--swatch-color:#ffffff" aria-label="White"></button>
+                <button type="button" data-gamejam-color="#06b6d4" style="--swatch-color:#06b6d4" aria-label="Cyan"></button>
+                <button type="button" data-gamejam-color="#ec4899" style="--swatch-color:#ec4899" aria-label="Pink"></button>
+              </div>
+            </div>
             <div class="shape-toolbar" aria-label="Add element">
               <button id="shape-menu-toggle" class="shape-menu-toggle" type="button" aria-expanded="false" aria-controls="shape-menu" title="Choose shape">
                 <svg class="shape-tool-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h6v6H5Z"></path><circle cx="17" cy="8" r="3"></circle><path d="M7 19 11 13l4 6Z"></path></svg>
                 <span>Shapes</span>
               </button>
               <div id="shape-menu" class="shape-menu hidden" role="menu">
+                <button class="shape-tool" type="button" data-shape-tool="square" title="Square" role="menuitem">
+                  <svg class="shape-tool-icon" viewBox="0 0 100 100" aria-hidden="true"><path d="M10 10H90V90H10Z"></path></svg>
+                  <span>Square</span>
+                </button>
                 <button class="shape-tool" type="button" data-shape-tool="ticket" title="Board" role="menuitem">
                   <svg class="shape-tool-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"></rect></svg>
                   <span>Board</span>
@@ -380,6 +388,17 @@
               </svg>
             </button>
             <button id="board-theme-btn" class="ghost-button" type="button">Dark background</button>
+            <div class="topbar-invite">
+              <button id="invite-btn" class="ghost-button" type="button" aria-expanded="false" aria-controls="invite-panel">Invite</button>
+              <div id="invite-panel" class="invite-panel topbar-invite-panel hidden">
+                <label for="invite-link">Invite link</label>
+                <div class="invite-row">
+                  <input id="invite-link" type="text" readonly />
+                  <button id="copy-invite-btn" class="small" type="button">Copy</button>
+                </div>
+                <p id="invite-status" class="muted"></p>
+              </div>
+            </div>
             <button id="top-logout-btn" class="ghost-button" type="button">Log out</button>
           </div>
         </header>
@@ -477,10 +496,16 @@
                 </label>
               </div>
             </div>
-            <form id="task-form" class="compact-form kanban-status-form">
-              <input id="task-title" type="text" placeholder="Add status" />
-              <button type="submit">+ Status</button>
-            </form>
+            <div class="kanban-create-row">
+              <form id="task-form" class="compact-form kanban-task-form">
+                <input id="task-title" type="text" placeholder="Add task" />
+                <button type="submit">+ Task</button>
+              </form>
+              <form id="task-column-form" class="compact-form kanban-status-form">
+                <input id="task-column-title" type="text" placeholder="Add status" />
+                <button type="submit">+ Status</button>
+              </form>
+            </div>
             <div id="tasks-list" class="tasks-list"></div>
           </div>
         </section>
@@ -535,15 +560,43 @@
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 15H6L5 6"/><path d="M10 11v5M14 11v5"/></svg>
                   </button>
                 </div>
-                <div id="code-editor-shell" class="code-editor-shell">
-                  <pre id="code-line-numbers" class="code-line-numbers" aria-hidden="true">1</pre>
-                  <textarea id="code-editor" class="code-editor" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="Paste or write code here..."></textarea>
+                <div id="code-editor-shell" class="code-editor-shell code-compare-shell">
+                  <section class="code-compare-pane code-current-pane">
+                    <div class="code-compare-pane-head">
+                      <strong>Current saved code</strong>
+                      <span class="code-compare-pane-label">Recent</span>
+                    </div>
+                    <pre id="code-current-highlight" class="code-current-highlight" aria-label="Current saved code"></pre>
+                  </section>
+                  <section class="code-compare-pane code-new-pane">
+                    <div class="code-compare-pane-head">
+                      <strong>Paste new code</strong>
+                      <div class="code-compare-actions">
+                        <button id="code-clear-draft-button" class="code-compare-action" type="button">Clear</button>
+                        <button id="code-apply-draft-button" class="code-compare-action primary" type="button">Apply</button>
+                      </div>
+                    </div>
+                    <div class="code-draft-editor">
+                      <pre id="code-line-numbers" class="code-line-numbers" aria-hidden="true">1</pre>
+                      <div class="code-draft-layers">
+                        <pre id="code-draft-highlight" class="code-draft-highlight" aria-hidden="true"></pre>
+                        <textarea id="code-editor" class="code-editor code-draft-input" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="Paste the proposed code here..."></textarea>
+                      </div>
+                    </div>
+                  </section>
                 </div>
                 <div class="code-status-bar">
                   <span id="code-language-label">Plain text</span>
                   <span id="code-cursor-position">Ln 1, Col 1</span>
                   <span id="code-save-status">Saved</span>
                 </div>
+                <section class="code-diff-section" aria-labelledby="code-diff-title">
+                  <div class="code-diff-head">
+                    <strong id="code-diff-title">Changes</strong>
+                    <span id="code-diff-summary">Paste new code to compare</span>
+                  </div>
+                  <div id="code-diff-view" class="code-diff-view"></div>
+                </section>
                 <section class="code-analysis" aria-labelledby="code-analysis-title">
                   <div class="code-analysis-header">
                     <h3 id="code-analysis-title">Analysis</h3>
@@ -596,16 +649,13 @@
             </div>
           </div>
           <div id="level-design-content" class="panel-content">
-            <button id="add-level-design-board" class="design-board-create" type="button">+ Level board</button>
-            <div class="design-board-fields">
-              <span>Objetivo do nivel</span>
-              <span>Obstaculos</span>
-              <span>Inimigos</span>
-              <span>Progressao</span>
-              <span>Recompensas</span>
-              <span>Dificuldade</span>
-              <span>Referencias visuais</span>
-            </div>
+            <form id="level-workspace-form" class="level-workspace-form">
+              <input id="level-workspace-name" type="text" maxlength="80" placeholder="New level name" />
+              <button type="submit">+ Level</button>
+            </form>
+            <div id="level-workspace-tabs" class="level-workspace-tabs" aria-label="Project levels"></div>
+            <div id="level-workspace-view" class="level-workspace-view"></div>
+            <button id="add-level-design-board" class="design-board-create" type="button">Add this level to the main board</button>
           </div>
         </section>
 
@@ -617,17 +667,11 @@
             </div>
           </div>
           <div id="character-design-content" class="panel-content">
-            <button id="add-character-design-board" class="design-board-create" type="button">+ Character board</button>
-            <div class="design-board-fields">
-              <span>Nome</span>
-              <span>Historia</span>
-              <span>Personalidade</span>
-              <span>Habilidades</span>
-              <span>Animacoes</span>
-              <span>Sprites</span>
-              <span>Sons</span>
-              <span>Referencias</span>
-            </div>
+            <form id="character-workspace-form" class="character-workspace-form">
+              <input id="character-workspace-name" type="text" maxlength="100" placeholder="New character name" />
+              <button type="submit">+ Character</button>
+            </form>
+            <div id="character-workspace-list" class="character-workspace-list"></div>
           </div>
         </section>
 
@@ -716,6 +760,8 @@
         "js/tasks/tasks-board.js",
         "js/tasks/hours-board.js",
         "js/code/code-workspace.js",
+        "js/story/level-workspace.js",
+        "js/story/character-workspace.js",
         "js/story/story-board.js",
         "js/team/team-board.js",
         "js/board/milestones-history.js",

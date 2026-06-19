@@ -51,13 +51,7 @@ function saveGddFields() {
 }
 
 function normalizeGddCharacters(gdd = {}) {
-  if (Array.isArray(gdd.characters)) {
-    return gdd.characters.map((character) => ({
-      id: character.id || crypto.randomUUID(),
-      name: cleanUserText(character.name, 100, "Character"),
-      description: String(character.description || "").slice(0, 1200)
-    }));
-  }
+  if (typeof normalizeCharacterWorkspaces === "function") return normalizeCharacterWorkspaces({ gdd });
   const legacyText = String(gdd.characters || "").trim();
   return legacyText
     ? [{ id: crypto.randomUUID(), name: "Character", description: legacyText.slice(0, 1200) }]
@@ -65,11 +59,14 @@ function normalizeGddCharacters(gdd = {}) {
 }
 
 function readGddCharacters() {
+  const project = getActiveProject();
+  const existing = new Map(normalizeGddCharacters(project?.gdd).map((character) => [character.id, character]));
   return Array.from(gddCharacterList.querySelectorAll(".gdd-character-card")).map((card) => ({
+    ...(existing.get(card.dataset.characterId) || {}),
     id: card.dataset.characterId || crypto.randomUUID(),
     name: cleanUserText(card.querySelector(".gdd-character-name")?.value, 100, "Character"),
-    description: String(card.querySelector(".gdd-character-description")?.value || "").slice(0, 1200)
-  })).filter((character) => character.name || character.description);
+    story: String(card.querySelector(".gdd-character-description")?.value || "").slice(0, 5000)
+  })).filter((character) => character.name || character.story);
 }
 
 function addGddCharacter(character = {}) {
@@ -81,7 +78,8 @@ function addGddCharacter(character = {}) {
   characters.push({
     id: crypto.randomUUID(),
     name: cleanUserText(character.name, 100, "New character"),
-    description: String(character.description || "").slice(0, 1200)
+    image: "", story: String(character.story || character.description || "").slice(0, 5000),
+    personality: "", abilities: "", notes: "", linkedItemIds: []
   });
   project.gdd.characters = characters;
   saveState({
@@ -90,6 +88,7 @@ function addGddCharacter(character = {}) {
     }, { projectId: project.id, groupKey: `project:${project.id}:gdd:characters` })
   });
   renderStory();
+  renderCharacterWorkspaces();
 }
 
 function updateGddCharacter(characterId, patch) {
@@ -101,13 +100,14 @@ function updateGddCharacter(characterId, patch) {
   if (!character) return;
   const before = { gdd: structuredClone(project.gdd) };
   if (Object.prototype.hasOwnProperty.call(patch, "name")) character.name = cleanUserText(patch.name, 100, "Character");
-  if (Object.prototype.hasOwnProperty.call(patch, "description")) character.description = String(patch.description || "").slice(0, 1200);
+  if (Object.prototype.hasOwnProperty.call(patch, "description")) character.story = String(patch.description || "").slice(0, 5000);
   project.gdd.characters = characters;
   saveState({
     historyEntry: createHistoryCommand("updateProject", project.id, before, {
       gdd: structuredClone(project.gdd)
     }, { projectId: project.id, groupKey: `project:${project.id}:gdd:characters:${characterId}` })
   });
+  renderCharacterWorkspaces();
 }
 
 async function deleteGddCharacter(characterId) {
@@ -123,6 +123,7 @@ async function deleteGddCharacter(characterId) {
     }, { projectId: project.id, groupKey: `project:${project.id}:gdd:characters` })
   });
   renderStory();
+  renderCharacterWorkspaces();
 }
 
 function renderGddCharacters(characters) {
@@ -141,7 +142,7 @@ function renderGddCharacters(characters) {
     card.innerHTML = `
       <input class="gdd-character-name" type="text" maxlength="100" value="${escapeHtml(character.name)}" placeholder="Character name" />
       <button class="gdd-character-delete" type="button" title="Remove character">x</button>
-      <textarea class="gdd-character-description" rows="3" placeholder="Description">${escapeHtml(character.description || "")}</textarea>
+      <textarea class="gdd-character-description" rows="3" placeholder="Story / description">${escapeHtml(character.story || character.description || "")}</textarea>
     `;
     card.querySelector(".gdd-character-name").addEventListener("change", (event) => updateGddCharacter(character.id, { name: event.target.value }));
     card.querySelector(".gdd-character-description").addEventListener("change", (event) => updateGddCharacter(character.id, { description: event.target.value }));

@@ -1,0 +1,37 @@
+.level-workspace-form { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 8px; }
+.level-workspace-tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 3px; }
+.level-workspace-tab { flex: 0 0 auto; padding: 7px 10px; border: 1px solid rgba(67,75,215,.2); border-radius: 999px; background: white; color: var(--accent-dark); font-weight: 800; }
+.level-workspace-tab.active { color: white; background: var(--accent); }
+.level-workspace-view { display: grid; gap: 9px; }
+.level-workspace-title { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 8px; }
+.level-name { font-weight: 900; }
+.level-split { display: grid; grid-template-columns: minmax(0,1fr); gap: 12px; }
+.level-canvas-column { min-width: 0; }
+.level-canvas-tools { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 6px; }
+.level-canvas-tools button,.level-canvas-tools label { display: inline-flex; align-items: center; gap: 5px; padding: 6px 8px; border: 1px solid rgba(67,75,215,.2); border-radius: 7px; background: white; color: var(--accent-dark); font-size: 11px; font-weight: 900; cursor: pointer; }
+.level-canvas-tools button.active { color: white; background: var(--accent); }
+.level-image-tool input { position: absolute; inline-size: 1px; block-size: 1px; opacity: 0; }
+.level-paint-color input { width: 28px; height: 25px; min-height: 25px; padding: 1px; border: 0; cursor: pointer; }
+.level-paint-size input { width: 72px; min-height: 20px; padding: 0; }
+.level-paint-size output { min-width: 30px; color: var(--muted); font-size: 10px; }
+.level-paint-palette { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 7px; }
+.level-paint-palette button { width: 25px; min-width: 25px; min-height: 25px; padding: 0; border: 2px solid white; border-radius: 50%; background: var(--swatch); box-shadow: 0 0 0 1px rgba(29,39,51,.35); }
+.level-paint-palette button:hover,.level-paint-palette button.active { transform: scale(1.12); box-shadow: 0 0 0 3px var(--accent); }
+.level-mini-board { position: relative; min-height: 360px; overflow: hidden; border: 1px solid rgba(67,75,215,.28); border-radius: 9px; background: #fbfbff; touch-action: none; }
+.level-drawings,.level-mini-items { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.level-drawings { z-index: 1; overflow: visible; }
+.level-mini-items { z-index: 2; }
+.level-live-stroke { opacity: .95; }
+.level-mini-item { position: absolute; z-index: 2; width: 135px; min-height: 90px; padding: 6px; border: 1px solid #c6a72e; border-radius: 7px; background: #fff1b8; box-shadow: 0 4px 12px rgba(29,39,51,.12); pointer-events: auto; }
+.level-mini-item textarea { width: 100%; height: 76px; border: 0; resize: none; background: transparent; font-size: 12px; }
+.level-mini-item button { position: absolute; top: 2px; right: 2px; min-height: 22px; padding: 2px 6px; }
+.level-mini-item.image { width: 150px; min-height: 100px; background: white; }
+.level-mini-item img { display: block; width: 100%; max-height: 140px; object-fit: contain; }
+.level-document-label { display: grid; align-content: start; gap: 6px; color: var(--muted); font-size: 11px; font-weight: 900; text-transform: uppercase; }
+.level-document { width: 100%; min-height: 190px; resize: vertical; line-height: 1.45; text-transform: none; }
+.app.app-dark .level-workspace-tab,.app.app-dark .level-canvas-tools button,.app.app-dark .level-canvas-tools label { border-color: var(--dark-panel-line); background: var(--dark-panel-field); color: #e5e7ff; }
+.app.app-dark .level-workspace-tab.active,.app.app-dark .level-canvas-tools button.active { border-color: #8b90ff; background: var(--accent); color: white; }
+.app.app-dark .level-mini-board { border-color: #596579; background: #eef1f7; }
+.app.app-dark .level-mini-item textarea { border: 0; background: transparent; color: #1d2733; }
+.app.app-dark .level-document-label { color: #cbd5e1; }
+.app.app-dark .level-paint-palette button { border-color: #dbe2ea; box-shadow: 0 0 0 1px #111827; }

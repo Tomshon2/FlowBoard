@@ -15,6 +15,12 @@ const codeDeleteButton = document.querySelector("#code-delete-button");
 const codeEditorShell = document.querySelector("#code-editor-shell");
 const codeEditor = document.querySelector("#code-editor");
 const codeLineNumbers = document.querySelector("#code-line-numbers");
+const codeCurrentHighlight = document.querySelector("#code-current-highlight");
+const codeDraftHighlight = document.querySelector("#code-draft-highlight");
+const codeClearDraftButton = document.querySelector("#code-clear-draft-button");
+const codeApplyDraftButton = document.querySelector("#code-apply-draft-button");
+const codeDiffSummary = document.querySelector("#code-diff-summary");
+const codeDiffView = document.querySelector("#code-diff-view");
 const codeLanguageLabel = document.querySelector("#code-language-label");
 const codeCursorPosition = document.querySelector("#code-cursor-position");
 const codeSaveStatus = document.querySelector("#code-save-status");
@@ -41,8 +47,7 @@ const CODE_LANGUAGES = {
 };
 
 let codeWorkspaceListenersReady = false;
-let codeSaveTimer = null;
-let codeAnalysisTimer = null;
+const codeCompareDrafts = new Map();
 
 function initializeCodeWorkspace() {
   if (codeWorkspaceListenersReady || !codePanel) return;
@@ -64,15 +69,18 @@ function initializeCodeWorkspace() {
   codeCopyButton.addEventListener("click", () => copyActiveCodeFile());
   codeDownloadButton.addEventListener("click", () => downloadActiveCodeFile());
   codeDeleteButton.addEventListener("click", () => deleteActiveCodeFile());
+  codeClearDraftButton.addEventListener("click", () => clearCodeComparisonDraft());
+  codeApplyDraftButton.addEventListener("click", () => applyCodeComparisonDraft());
   codeAnalyzeButton.addEventListener("click", () => renderCodeAnalysis(getActiveCodeFile()));
   codeEditor.addEventListener("input", handleCodeEditorInput);
   codeEditor.addEventListener("scroll", () => {
     codeLineNumbers.scrollTop = codeEditor.scrollTop;
+    codeDraftHighlight.scrollTop = codeEditor.scrollTop;
+    codeDraftHighlight.scrollLeft = codeEditor.scrollLeft;
   });
   codeEditor.addEventListener("click", updateCodeCursorPosition);
   codeEditor.addEventListener("keyup", updateCodeCursorPosition);
   codeEditor.addEventListener("keydown", handleCodeEditorKeydown);
-  codeEditor.addEventListener("blur", flushCodeWorkspaceSave);
   codeEditorShell.addEventListener("dragover", (event) => {
     if (!event.dataTransfer?.files?.length) return;
     event.preventDefault();
@@ -96,7 +104,7 @@ function renderCodeWorkspace() {
   renderCodeFileList(project);
 
   const hasFile = Boolean(activeFile);
-  [codeActiveFileName, codeLanguage, codeEditor, codeCopyButton, codeDownloadButton, codeDeleteButton, codeAnalyzeButton]
+  [codeActiveFileName, codeLanguage, codeEditor, codeCopyButton, codeDownloadButton, codeDeleteButton, codeAnalyzeButton, codeClearDraftButton, codeApplyDraftButton]
     .forEach((control) => { control.disabled = !hasFile; });
 
   if (!activeFile) {
@@ -104,22 +112,26 @@ function renderCodeWorkspace() {
     codeLanguage.value = "plaintext";
     codeEditor.value = "";
     codeEditor.dataset.fileId = "";
-    codeEditor.placeholder = "Create or import a file to start coding.";
+    codeEditor.placeholder = "Create or import a file to compare code.";
+    codeCurrentHighlight.innerHTML = '<span class="code-empty-preview">Create or import a file to begin.</span>';
+    codeDraftHighlight.textContent = "";
     codeLanguageLabel.textContent = "Plain text";
     updateCodeLineNumbers();
     updateCodeCursorPosition();
+    renderCodeDiff(null, "");
     renderCodeAnalysis(null);
     return;
   }
 
-  codeEditor.placeholder = "Paste or write code here...";
+  codeEditor.placeholder = "Paste the proposed code here...";
   if (document.activeElement !== codeActiveFileName) codeActiveFileName.value = activeFile.name;
   codeLanguage.value = CODE_LANGUAGES[activeFile.language] ? activeFile.language : "plaintext";
   if (codeEditor.dataset.fileId !== activeFile.id || document.activeElement !== codeEditor) {
-    codeEditor.value = activeFile.content;
+    codeEditor.value = codeCompareDrafts.get(activeFile.id) || "";
     codeEditor.dataset.fileId = activeFile.id;
   }
   codeLanguageLabel.textContent = CODE_LANGUAGES[activeFile.language]?.label || "Plain text";
+  renderCodeComparison(activeFile);
   updateCodeLineNumbers();
   updateCodeCursorPosition();
   renderCodeAnalysis(activeFile);
@@ -169,7 +181,6 @@ function getActiveCodeFile(project = getActiveProject()) {
 }
 
 function selectCodeFile(fileId) {
-  flushCodeWorkspaceSave();
   const project = getActiveProject();
   if (!project?.codeFiles?.some((file) => file.id === fileId)) return;
   project.activeCodeFileId = fileId;
@@ -178,7 +189,6 @@ function selectCodeFile(fileId) {
 }
 
 function createCodeFile(rawName, content = "", requestedLanguage = "") {
-  flushCodeWorkspaceSave();
   const project = getActiveProject();
   if (!project) return null;
   project.codeFiles ??= [];
@@ -260,13 +270,11 @@ function updateActiveCodeLanguage(language) {
 function handleCodeEditorInput() {
   const file = getActiveCodeFile();
   if (!file) return;
-  file.content = codeEditor.value;
-  file.modifiedAt = Date.now();
+  codeCompareDrafts.set(file.id, codeEditor.value);
+  renderCodeComparison(file);
   updateCodeLineNumbers();
   updateCodeCursorPosition();
-  queueCodeWorkspaceSave();
-  window.clearTimeout(codeAnalysisTimer);
-  codeAnalysisTimer = window.setTimeout(() => renderCodeAnalysis(file), 280);
+  codeSaveStatus.textContent = "Draft not applied";
 }
 
 function handleCodeEditorKeydown(event) {
@@ -280,22 +288,178 @@ function handleCodeEditorKeydown(event) {
   }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
     event.preventDefault();
-    flushCodeWorkspaceSave();
+    applyCodeComparisonDraft();
   }
 }
 
-function queueCodeWorkspaceSave() {
-  codeSaveStatus.textContent = "Saving...";
-  window.clearTimeout(codeSaveTimer);
-  codeSaveTimer = window.setTimeout(flushCodeWorkspaceSave, 320);
+function clearCodeComparisonDraft() {
+  const file = getActiveCodeFile();
+  if (!file) return;
+  codeCompareDrafts.delete(file.id);
+  codeEditor.value = "";
+  renderCodeComparison(file);
+  updateCodeLineNumbers();
+  updateCodeCursorPosition();
+  codeSaveStatus.textContent = "Draft cleared";
+  codeEditor.focus();
 }
 
-function flushCodeWorkspaceSave() {
-  if (!codeSaveTimer) return;
-  window.clearTimeout(codeSaveTimer);
-  codeSaveTimer = null;
-  saveState({ skipHistory: true });
-  codeSaveStatus.textContent = "Saved";
+function applyCodeComparisonDraft() {
+  const project = getActiveProject();
+  const file = getActiveCodeFile(project);
+  if (!project || !file || !codeCompareDrafts.has(file.id)) return;
+  const before = {
+    codeFiles: structuredClone(project.codeFiles),
+    history: structuredClone(project.history || [])
+  };
+  file.content = codeCompareDrafts.get(file.id) || "";
+  file.modifiedAt = Date.now();
+  codeCompareDrafts.delete(file.id);
+  logProjectEvent("Code comparison applied", file.name, file.id);
+  saveState({
+    historyEntry: createHistoryCommand("updateProject", project.id, before, {
+      codeFiles: structuredClone(project.codeFiles),
+      history: structuredClone(project.history || [])
+    }, { projectId: project.id, groupKey: `project:${project.id}:code:${file.id}:apply-diff` }),
+    forceStep: true
+  });
+  codeSaveStatus.textContent = "New code applied";
+  renderCodeWorkspace();
+}
+
+function renderCodeComparison(file = getActiveCodeFile()) {
+  if (!file) return;
+  const draft = codeEditor.value;
+  const hasDraft = codeCompareDrafts.has(file.id);
+  codeCurrentHighlight.innerHTML = renderHighlightedCodeLines(file.content || "", file.language, true);
+  codeDraftHighlight.innerHTML = renderHighlightedCodeLines(draft, file.language, false);
+  codeClearDraftButton.disabled = !hasDraft;
+  codeApplyDraftButton.disabled = !hasDraft || draft === file.content;
+  renderCodeDiff(file, draft);
+}
+
+function renderHighlightedCodeLines(content, language, showNumbers) {
+  return String(content || "").split("\n").map((line, index) => {
+    const number = showNumbers ? ` data-line="${index + 1}"` : "";
+    return `<span class="code-render-line"${number}>${highlightCode(line, language) || " "}</span>`;
+  }).join("");
+}
+
+function highlightCode(content, language = "plaintext") {
+  const keywordSets = {
+    javascript: "async await break case catch class const continue default delete do else export extends finally for from function if import in instanceof let new of return static super switch this throw try typeof var void while with yield",
+    typescript: "abstract any as async await boolean break case catch class const constructor continue declare default delete do else enum export extends finally for from function if implements import in infer interface keyof let namespace never new null number object of private protected public readonly return static string super switch symbol this throw true try type typeof undefined unknown var void while yield",
+    python: "and as assert async await break class continue def del elif else except False finally for from global if import in is lambda None nonlocal not or pass raise return True try while with yield",
+    gdscript: "and as assert await break breakpoint class class_name const continue elif else enum extends for func if in is match not null or pass preload return self signal static super true false var void while yield",
+    csharp: "abstract as async await base bool break byte case catch char checked class const continue decimal default delegate do double else enum event explicit extern false finally fixed float for foreach goto if implicit in int interface internal is lock long namespace new null object operator out override params private protected public readonly ref return sbyte sealed short sizeof stackalloc static string struct switch this throw true try typeof uint ulong unchecked unsafe ushort using virtual void volatile while",
+    cpp: "alignas alignof auto bool break case catch char class const constexpr continue default delete do double else enum explicit export extern false float for friend if inline int long namespace new nullptr operator private protected public register reinterpret_cast return short signed sizeof static struct switch template this throw true try typedef typename union unsigned using virtual void volatile while",
+    java: "abstract assert boolean break byte case catch char class const continue default do double else enum extends final finally float for goto if implements import instanceof int interface long native new null package private protected public return short static strictfp super switch synchronized this throw throws transient true try void volatile while",
+    sql: "all alter and as asc begin between by case check column constraint create database default delete desc distinct drop else end exists foreign from full group having in index inner insert into is join key left like limit not null on or order outer primary references right row select set table then union unique update values view when where",
+    css: "important inherit initial none auto block flex grid absolute relative fixed sticky",
+    json: "true false null"
+  };
+  const keywords = new Set(String(keywordSets[language] || "").split(" ").filter(Boolean));
+  const commentBranch = ["python", "gdscript", "markdown"].includes(language)
+    ? "#[^\\n]*"
+    : language === "sql" ? "--[^\\n]*" : "\\/\\*[^]*?\\*\\/|\\/\\/[^\\n]*";
+  const tagBranch = language === "html" ? "<\\/?[A-Za-z][^>]*>" : "(?!)";
+  const tokenPattern = new RegExp(`${tagBranch}|${commentBranch}|\"(?:\\\\.|[^\"\\\\])*\"|'(?:\\\\.|[^'\\\\])*'|\`(?:\\\\.|[^\`\\\\])*\`|\\b\\d+(?:\\.\\d+)?\\b|[A-Za-z_$][\\w$]*`, "g");
+  let output = "";
+  let cursor = 0;
+  for (const match of String(content || "").matchAll(tokenPattern)) {
+    const token = match[0];
+    const index = match.index || 0;
+    output += escapeHtml(content.slice(cursor, index));
+    let kind = "identifier";
+    if (/^(?:\/\/|\/\*|#|--)/.test(token)) kind = "comment";
+    else if (/^<\/?/.test(token)) kind = "tag";
+    else if (/^["'`]/.test(token)) kind = "string";
+    else if (/^\d/.test(token)) kind = "number";
+    else if (keywords.has(token)) kind = "keyword";
+    else if (/^(?:true|false|null|None|undefined)$/.test(token)) kind = "constant";
+    else if (/^(?:const|let|var|def|func|class|interface|type)\s+$/.test(content.slice(0, index).match(/\S+\s*$/)?.[0] || "")) kind = "variable";
+    else if (/^\s*\(/.test(content.slice(index + token.length))) kind = "function";
+    else if (["css", "json"].includes(language) && /^\s*:/.test(content.slice(index + token.length))) kind = "property";
+    else if (/^[A-Z]/.test(token)) kind = "type";
+    output += `<span class="syntax-${kind}">${escapeHtml(token)}</span>`;
+    cursor = index + token.length;
+  }
+  output += escapeHtml(content.slice(cursor));
+  return output;
+}
+
+function renderCodeDiff(file, draft) {
+  codeDiffView.innerHTML = "";
+  if (!file || !codeCompareDrafts.has(file.id)) {
+    codeDiffSummary.textContent = "Paste new code to compare";
+    codeDiffView.innerHTML = '<p class="code-diff-empty">The Git-style diff will appear here.</p>';
+    return;
+  }
+  const diff = buildCodeLineDiff(file.content || "", draft);
+  const additions = diff.filter((row) => row.type === "add").length;
+  const removals = diff.filter((row) => row.type === "remove").length;
+  codeDiffSummary.textContent = `+${additions} -${removals}`;
+  diff.slice(0, 1200).forEach((row) => {
+    const line = document.createElement("div");
+    line.className = `code-diff-row ${row.type}`;
+    line.innerHTML = `
+      <span class="code-diff-marker">${row.type === "add" ? "+" : row.type === "remove" ? "-" : " "}</span>
+      <span class="code-diff-number">${row.oldNumber || ""}</span>
+      <span class="code-diff-number">${row.newNumber || ""}</span>
+      <code class="code-diff-code">${highlightCode(row.text, file.language) || " "}</code>`;
+    codeDiffView.append(line);
+  });
+  if (diff.length > 1200) {
+    const note = document.createElement("p");
+    note.className = "code-diff-empty";
+    note.textContent = `${diff.length - 1200} more diff lines hidden for performance.`;
+    codeDiffView.append(note);
+  }
+}
+
+function buildCodeLineDiff(previous, next) {
+  const oldLines = String(previous).split("\n");
+  const newLines = String(next).split("\n");
+  if (oldLines.length * newLines.length > 160000) return buildFastCodeLineDiff(oldLines, newLines);
+  const table = Array.from({ length: oldLines.length + 1 }, () => new Uint16Array(newLines.length + 1));
+  for (let oldIndex = oldLines.length - 1; oldIndex >= 0; oldIndex -= 1) {
+    for (let newIndex = newLines.length - 1; newIndex >= 0; newIndex -= 1) {
+      table[oldIndex][newIndex] = oldLines[oldIndex] === newLines[newIndex]
+        ? table[oldIndex + 1][newIndex + 1] + 1
+        : Math.max(table[oldIndex + 1][newIndex], table[oldIndex][newIndex + 1]);
+    }
+  }
+  const rows = [];
+  let oldIndex = 0;
+  let newIndex = 0;
+  while (oldIndex < oldLines.length || newIndex < newLines.length) {
+    if (oldIndex < oldLines.length && newIndex < newLines.length && oldLines[oldIndex] === newLines[newIndex]) {
+      rows.push({ type: "context", text: oldLines[oldIndex], oldNumber: oldIndex + 1, newNumber: newIndex + 1 });
+      oldIndex += 1;
+      newIndex += 1;
+    } else if (newIndex < newLines.length && (oldIndex >= oldLines.length || table[oldIndex][newIndex + 1] >= table[oldIndex + 1][newIndex])) {
+      rows.push({ type: "add", text: newLines[newIndex], oldNumber: "", newNumber: newIndex + 1 });
+      newIndex += 1;
+    } else {
+      rows.push({ type: "remove", text: oldLines[oldIndex], oldNumber: oldIndex + 1, newNumber: "" });
+      oldIndex += 1;
+    }
+  }
+  return rows;
+}
+
+function buildFastCodeLineDiff(oldLines, newLines) {
+  const rows = [];
+  const length = Math.max(oldLines.length, newLines.length);
+  for (let index = 0; index < length; index += 1) {
+    if (oldLines[index] === newLines[index]) {
+      rows.push({ type: "context", text: oldLines[index] || "", oldNumber: index + 1, newNumber: index + 1 });
+    } else {
+      if (index < oldLines.length) rows.push({ type: "remove", text: oldLines[index], oldNumber: index + 1, newNumber: "" });
+      if (index < newLines.length) rows.push({ type: "add", text: newLines[index], oldNumber: "", newNumber: index + 1 });
+    }
+  }
+  return rows;
 }
 
 async function copyActiveCodeFile() {
@@ -325,7 +489,6 @@ function downloadActiveCodeFile() {
 }
 
 async function deleteActiveCodeFile() {
-  flushCodeWorkspaceSave();
   const project = getActiveProject();
   const file = getActiveCodeFile(project);
   if (!project || !file) return;

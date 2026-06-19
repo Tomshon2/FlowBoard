@@ -115,7 +115,6 @@ function toggleProjectFavorite(projectId) {
 
 function switchActiveProject(projectId) {
   if (state.activeProjectId === projectId) return;
-  flushCodeWorkspaceSave();
   persistActiveProjectPanelValues();
   persistAllVisibleItemSizes();
   state.activeProjectId = projectId;
@@ -143,17 +142,23 @@ function renderWorkspace() {
 
   project.items.forEach((item) => {
     const boardLike = item.type === "ticket" || item.type === "shape" || item.type === "table";
+    const isLevelPreview = isLevelPreviewItem(item);
+    const sourceLevel = item.levelWorkspaceId
+      ? project.levelWorkspaces?.find((level) => level.id === item.levelWorkspaceId)
+      : null;
     const showInlineBoardTools = false;
     ensureItemFitsText(item);
     const node = document.createElement("article");
     node.className = `board-item ${item.type}`;
-    node.classList.toggle("caption-open", item.type === "image" && item.captionOpen);
-    node.classList.toggle("caption-collapsed", item.type === "image" && !item.captionOpen);
+    node.classList.toggle("level-document-board", item.type === "ticket" && Boolean(item.levelWorkspaceId));
+    node.classList.toggle("level-preview-board", isLevelPreview);
+    node.classList.toggle("caption-open", item.type === "image" && !isLevelPreview && item.captionOpen);
+    node.classList.toggle("caption-collapsed", item.type === "image" && !isLevelPreview && !item.captionOpen);
     node.style.left = `${item.x}px`;
     node.style.top = `${item.y}px`;
     node.style.width = `${item.width}px`;
     node.style.height = `${item.height}px`;
-    node.style.background = item.type === "ticket" ? item.color : item.type === "image" ? "#ffffff" : "transparent";
+    node.style.background = item.type === "ticket" ? item.color : item.type === "image" ? isLevelPreview ? item.color || "#f8fafc" : "#ffffff" : "transparent";
     if (item.type === "table") node.style.setProperty("--table-fill-color", item.color || "#ffffff");
     if (item.type === "shape") applyShapeTextBoxStyles(node, item.shape || "circle");
     node.dataset.id = item.id;
@@ -352,42 +357,50 @@ function renderWorkspace() {
     }
 
     if (item.type === "image") {
+      if (isLevelPreview) {
+        const title = document.createElement("div");
+        title.className = "level-preview-title";
+        title.textContent = item.levelPreviewTitle || sourceLevel?.name || String(item.name || item.text || "Level").replace(/\s+level board$/i, "") || "Level";
+        node.append(title);
+      }
       const img = document.createElement("img");
-      img.src = item.src;
+      img.src = isLevelPreview && sourceLevel ? createLevelBoardPreview(sourceLevel) : item.src;
       img.alt = item.text || "Imported image";
       img.loading = "lazy";
       img.decoding = "async";
       img.draggable = false;
       node.append(img);
 
-      const captionToggle = document.createElement("button");
-      captionToggle.type = "button";
-      captionToggle.className = "image-caption-toggle";
-      captionToggle.title = item.captionOpen ? "Hide text" : "Show text";
-      captionToggle.setAttribute("aria-label", captionToggle.title);
-      captionToggle.textContent = item.captionOpen ? "^" : "v";
-      captionToggle.addEventListener("pointerdown", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-      });
-      captionToggle.addEventListener("click", (event) => {
-        event.stopPropagation();
-        selectedBoardItemId = item.id;
-        selectedItemIds = new Set([item.id]);
-        selectedConnectionIds.clear();
-        selectedDrawingIds.clear();
-        const before = structuredClone(item);
-        item.captionOpen = !item.captionOpen;
-        saveState({
-          historyEntry: createHistoryCommand("updateItem", item.id, before, item, {
-            projectId: state.activeProjectId,
-            groupKey: `item:${item.id}:caption`
-          }),
-          forceStep: true
+      if (!isLevelPreview) {
+        const captionToggle = document.createElement("button");
+        captionToggle.type = "button";
+        captionToggle.className = "image-caption-toggle";
+        captionToggle.title = item.captionOpen ? "Hide text" : "Show text";
+        captionToggle.setAttribute("aria-label", captionToggle.title);
+        captionToggle.textContent = item.captionOpen ? "^" : "v";
+        captionToggle.addEventListener("pointerdown", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
         });
-        render();
-      });
-      node.append(captionToggle);
+        captionToggle.addEventListener("click", (event) => {
+          event.stopPropagation();
+          selectedBoardItemId = item.id;
+          selectedItemIds = new Set([item.id]);
+          selectedConnectionIds.clear();
+          selectedDrawingIds.clear();
+          const before = structuredClone(item);
+          item.captionOpen = !item.captionOpen;
+          saveState({
+            historyEntry: createHistoryCommand("updateItem", item.id, before, item, {
+              projectId: state.activeProjectId,
+              groupKey: `item:${item.id}:caption`
+            }),
+            forceStep: true
+          });
+          render();
+        });
+        node.append(captionToggle);
+      }
     }
 
     if (item.type === "shape") {
@@ -401,10 +414,10 @@ function renderWorkspace() {
     let text = null;
     if (item.type !== "table") {
       text = document.createElement("div");
-      text.className = `item-text ${item.type === "image" ? "image-caption" : ""} ${item.type === "shape" ? "shape-text" : ""}`;
-      text.classList.toggle("caption-hidden", item.type === "image" && !item.captionOpen);
+      text.className = `item-text ${isLevelPreview ? "level-preview-caption" : item.type === "image" ? "image-caption" : ""} ${item.type === "shape" ? "shape-text" : ""}`;
+      text.classList.toggle("caption-hidden", item.type === "image" && !isLevelPreview && !item.captionOpen);
       text.contentEditable = "false";
-      text.dataset.placeholder = boardLike ? "Describe the board" : "Write a caption";
+      text.dataset.placeholder = isLevelPreview ? "Describe this level board" : boardLike ? "Describe the board" : "Write a caption";
       text.innerHTML = boardLike ? (item.html || escapeHtml(item.text || "")) : escapeHtml(item.text || "");
       applyTextStyleToNode(text, getItemTextStyle(item));
       text.addEventListener("pointerdown", (event) => {
@@ -448,6 +461,10 @@ function renderWorkspace() {
     }
 
     const linkedTasks = (project.tasks || []).filter((task) => task.linkedItemId === item.id);
+    const linkedCharacters = normalizeCharacterWorkspaces(project).filter((character) =>
+      (character.linkedItemIds || []).includes(item.id));
+    const linkBadges = document.createElement("div");
+    linkBadges.className = "board-link-badges";
     if (linkedTasks.length) {
       const linkedBadge = document.createElement("button");
       linkedBadge.type = "button";
@@ -457,13 +474,28 @@ function renderWorkspace() {
       linkedBadge.addEventListener("pointerdown", (event) => event.stopPropagation());
       linkedBadge.addEventListener("click", (event) => {
         event.stopPropagation();
-        taskSearch.value = getBoardItemName(item, "");
+        taskSearch.value = linkedTasks[0].linkedItemId === item.id ? getBoardItemName(item, "") : linkedTasks[0].title;
         openSidePanelFromBoardContext("tasks");
         renderTasks();
         showTaskBoardLink(linkedTasks[0].id, item.id);
       });
-      node.append(linkedBadge);
+      linkBadges.append(linkedBadge);
     }
+    if (linkedCharacters.length) {
+      const characterBadge = document.createElement("button");
+      characterBadge.type = "button";
+      characterBadge.className = "board-linked-characters";
+      characterBadge.title = "Open linked characters";
+      characterBadge.textContent = `${linkedCharacters.length} character${linkedCharacters.length === 1 ? "" : "s"} linked`;
+      characterBadge.addEventListener("pointerdown", (event) => event.stopPropagation());
+      characterBadge.addEventListener("click", (event) => {
+        event.stopPropagation();
+        openSidePanelFromBoardContext("character-design");
+        focusCharacterWorkspace(linkedCharacters[0].id);
+      });
+      linkBadges.append(characterBadge);
+    }
+    if (linkBadges.childElementCount) node.append(linkBadges);
 
     node.append(createResizeHandles(node, item, project));
     node.append(createConnectionDots(item));

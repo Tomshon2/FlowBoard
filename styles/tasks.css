@@ -2,12 +2,55 @@
   padding: 0 10px;
 }
 
+.tasks-panel {
+  container-type: inline-size;
+}
+
 .kanban-filter-bar,
 .kanban-actions-tab,
 .kanban-data-actions {
   display: grid;
   gap: 8px;
   margin-bottom: 10px;
+}
+
+.kanban-create-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: center;
+  gap: 14px;
+}
+
+.kanban-create-row form {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.kanban-status-form {
+  width: 100% !important;
+  justify-self: stretch;
+}
+
+.kanban-create-row input,
+.kanban-create-row button {
+  min-width: 0;
+  min-height: 40px;
+  margin: 0;
+}
+
+.kanban-create-row button {
+  white-space: nowrap;
+}
+
+@container (max-width: 460px) {
+  .kanban-create-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
 }
 
 .kanban-filter-bar {
@@ -550,7 +593,7 @@
   gap: 5px;
   margin-top: 6px;
   border: 1px solid rgba(67, 75, 215, 0.2);
-  border-radius: 8px;
+  border-radius: 12px;
   background: white;
   padding: 6px;
   box-shadow: 0 12px 24px rgba(31, 41, 55, 0.12);
@@ -1110,11 +1153,20 @@
   color: var(--muted);
 }
 
-.board-linked-tasks {
+.board-link-badges {
   position: absolute;
   right: 8px;
   bottom: 8px;
   z-index: 4;
+  display: grid;
+  justify-items: end;
+  gap: 5px;
+  max-width: calc(100% - 16px);
+}
+
+.board-linked-tasks,
+.board-linked-characters {
+  position: static;
   min-height: 26px;
   border: 1px solid rgba(67, 75, 215, 0.24);
   border-radius: 999px;
@@ -1127,6 +1179,11 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.board-linked-characters {
+  border-color: rgba(143,43,213,.3);
+  color: #6d28d9;
 }
 
 .task-issue-meta {

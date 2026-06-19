@@ -1,4 +1,5 @@
 const FLOW_SHAPE_DEFINITIONS = {
+  square: { label: "Square", path: "M4 4H96V96H4Z", textBox: { width: 0.78, height: 0.78 } },
   rectangle: { label: "Rectangle", path: "M4 4H96V96H4Z", textBox: { width: 0.86, height: 0.78 } },
   "rounded-rectangle": { label: "Rounded rectangle", rect: { x: 4, y: 4, width: 92, height: 92, rx: 11 }, textBox: { width: 0.84, height: 0.76 } },
   circle: { label: "Circle", ellipse: { cx: 50, cy: 50, rx: 47, ry: 47 }, textBox: { width: 0.66, height: 0.58 } },

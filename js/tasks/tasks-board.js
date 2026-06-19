@@ -689,7 +689,8 @@ function openTaskIssueDialog(taskId) {
   const progress = clamp(Number(task.progress) || 0, 0, 100);
   const checklist = Array.isArray(task.checklist) ? task.checklist : [];
   const column = columns.find((candidate) => candidate.id === task.columnId) || columns[0];
-  const boardItems = (project.items || []).filter((item) => item.type !== "image");
+  const boardItems = (project.items || []).filter((item) =>
+    item.type !== "image" || item.levelWorkspaceId || item.boardRole === "level-preview");
   const dependencyOptions = (project.tasks || []).filter((candidate) => candidate.id !== task.id);
   const dialog = document.createElement("div");
   dialog.className = "task-issue-backdrop";

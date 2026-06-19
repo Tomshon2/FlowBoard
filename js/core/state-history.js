@@ -150,10 +150,14 @@ function normalizeState() {
     normalizeTaskBoard(project);
     normalizeMilestones(project);
     normalizeProjectHistory(project);
+    if (typeof normalizeLevelWorkspaces === "function") normalizeLevelWorkspaces(project);
+    const normalizedCharacters = typeof normalizeCharacterWorkspaces === "function"
+      ? normalizeCharacterWorkspaces(project)
+      : project.gdd?.characters;
     project.gdd = {
       concept: String(project.gdd?.concept || "").slice(0, 3000),
       genre: cleanUserText(project.gdd?.genre, 120, ""),
-      characters: String(project.gdd?.characters || "").slice(0, 3000),
+      characters: normalizedCharacters,
       mechanics: String(project.gdd?.mechanics || "").slice(0, 3000)
     };
     project.story = normalizeStoryNodes(project.story);

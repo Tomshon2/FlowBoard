@@ -45,7 +45,7 @@
   min-width: 0;
   gap: 5px;
   border: 1px solid rgba(255, 255, 255, 0.48);
-  border-radius: 8px;
+  border-radius: 12px;
   background: #ffffff;
   padding: 6px;
   box-shadow: 0 18px 38px rgba(18, 23, 34, 0.26);
@@ -101,6 +101,64 @@
   align-items: center;
   padding: 0;
   font-weight: 900;
+  border-radius: 8px;
+}
+
+.gamejam-color-control {
+  position: relative;
+  display: none;
+}
+
+.app.gamejam-mode .create-color-picker {
+  display: none;
+}
+
+.app.gamejam-mode .gamejam-color-control {
+  display: block;
+}
+
+.gamejam-color-toggle {
+  width: 42px;
+  height: 40px;
+  min-width: 42px;
+  min-height: 40px;
+  border: 3px solid #ffffff;
+  border-radius: 8px;
+  background: var(--selected-color, #fff1b8);
+  box-shadow: 0 0 0 1px rgba(29, 39, 51, 0.28);
+}
+
+.gamejam-color-palette {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 95;
+  display: grid;
+  grid-template-columns: repeat(5, 28px);
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  padding: 8px;
+  box-shadow: var(--shadow);
+}
+
+.gamejam-color-palette button {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  border: 2px solid rgba(29, 39, 51, 0.28);
+  border-radius: 7px;
+  background: var(--swatch-color);
+  padding: 0;
+}
+
+.gamejam-color-palette button:hover,
+.gamejam-color-palette button.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(67, 75, 215, 0.24);
+  transform: scale(1.06);
 }
 
 .shape-menu .shape-tool span {
@@ -228,12 +286,24 @@
 .drawer-right {
   left: 0;
   border-right: 1px solid var(--line);
+  overflow-x: hidden;
   overflow-y: auto;
   transform: translateX(calc(-100% - 8px));
   padding-top: 64px;
   width: var(--side-drawer-width, min(390px, calc(100vw - 58px)));
   min-width: 365px;
   max-width: calc(100vw - 58px);
+}
+
+.drawer-right > *,
+.drawer-right .panel-content,
+.drawer-right .tasks-list {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.drawer-right .drawer-resize-handle::after {
+  right: 10px;
 }
 
 .app.workspace-open .drawer-left,
@@ -614,12 +684,13 @@
 
 .topbar-title {
   flex: 0 1 240px;
-  justify-content: flex-end;
-  order: 1;
+  justify-content: flex-start;
+  order: 0;
+  margin-right: auto;
 }
 
 .topbar-actions {
-  order: 2;
+  order: 1;
 }
 
 .brand-logo,
@@ -692,6 +763,27 @@
 .invite-panel .muted {
   margin: 0;
   font-size: 12px;
+}
+
+.topbar-invite {
+  position: relative;
+  display: flex;
+}
+
+.topbar-invite-panel {
+  position: absolute;
+  top: calc(100% + 9px);
+  right: 0;
+  z-index: 40;
+  width: min(360px, calc(100vw - 32px));
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+}
+
+.topbar-invite-panel .invite-row button {
+  background: var(--accent);
+  color: #ffffff;
 }
 
 .section-title {
@@ -893,7 +985,7 @@
   border-bottom: 1px solid rgba(255, 255, 255, 0.26);
   color: white;
   box-shadow: 0 14px 34px rgba(67, 75, 215, 0.18);
-  justify-content: flex-end;
+  justify-content: space-between;
   transition: padding-left 180ms ease;
 }
 

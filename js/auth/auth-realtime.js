@@ -458,6 +458,7 @@ async function acceptWorkspaceInvite(token) {
 async function createInviteLink() {
   inviteStatus.textContent = "";
   invitePanel.classList.remove("hidden");
+  inviteBtn.setAttribute("aria-expanded", "true");
   inviteLink.value = "Creating link...";
   try {
     if (!currentWorkspaceId) throw new Error("Open a workspace before creating an invite.");

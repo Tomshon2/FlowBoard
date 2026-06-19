@@ -91,6 +91,8 @@ const cursorLayer = document.querySelector("#cursor-layer");
 const zoomIndicator = document.querySelector("#zoom-indicator");
 const taskForm = document.querySelector("#task-form");
 const taskTitle = document.querySelector("#task-title");
+const taskColumnForm = document.querySelector("#task-column-form");
+const taskColumnTitle = document.querySelector("#task-column-title");
 const tasksList = document.querySelector("#tasks-list");
 const taskCount = document.querySelector("#task-count");
 const taskSearch = document.querySelector("#task-search");
@@ -109,6 +111,10 @@ const importTasksCsvInput = document.querySelector("#import-tasks-csv-input");
 const imageInput = document.querySelector("#image-input");
 const drawTool = document.querySelector("#draw-tool");
 const createColor = document.querySelector("#create-color");
+const gameJamColorControl = document.querySelector("#gamejam-color-control");
+const gameJamColorToggle = document.querySelector("#gamejam-color-toggle");
+const gameJamColorPalette = document.querySelector("#gamejam-color-palette");
+const gameJamColorButtons = document.querySelectorAll("[data-gamejam-color]");
 const shapeMenuToggle = document.querySelector("#shape-menu-toggle");
 const shapeMenu = document.querySelector("#shape-menu");
 const shapeTools = document.querySelectorAll("[data-shape-tool]");
@@ -201,7 +207,6 @@ const storyRootTitle = document.querySelector("#story-root-title");
 const storyTree = document.querySelector("#story-tree");
 const storyCount = document.querySelector("#story-count");
 const addLevelDesignBoard = document.querySelector("#add-level-design-board");
-const addCharacterDesignBoard = document.querySelector("#add-character-design-board");
 const gddConcept = document.querySelector("#gdd-concept");
 const gddGenre = document.querySelector("#gdd-genre");
 const gddCharacterList = document.querySelector("#gdd-character-list");
@@ -237,6 +242,8 @@ if (eventListenersReady) return;
 eventListenersReady = true;
 initializeSideDrawerResize();
 initializeCodeWorkspace();
+initializeLevelWorkspaces();
+initializeCharacterWorkspaces();
 displayNameInput.addEventListener("change", () => saveDisplayName());
 
 loginForm.addEventListener("submit", (event) => {
@@ -252,13 +259,22 @@ loginForm.addEventListener("submit", (event) => {
 authLoginMode.addEventListener("click", () => setAuthMode("login"));
 authSignupMode.addEventListener("click", () => setAuthMode("signup"));
 
-document.querySelector("#logout-btn").addEventListener("click", () => {
-  signOut();
-});
 topLogoutBtn.addEventListener("click", () => {
   signOut();
 });
-inviteBtn.addEventListener("click", () => createInviteLink());
+inviteBtn.addEventListener("click", () => {
+  if (!invitePanel.classList.contains("hidden")) {
+    invitePanel.classList.add("hidden");
+    inviteBtn.setAttribute("aria-expanded", "false");
+    return;
+  }
+  createInviteLink();
+});
+document.addEventListener("click", (event) => {
+  if (invitePanel.classList.contains("hidden") || event.target.closest(".topbar-invite")) return;
+  invitePanel.classList.add("hidden");
+  inviteBtn.setAttribute("aria-expanded", "false");
+});
 copyInviteBtn.addEventListener("click", () => copyInviteLink());
 taskSearch.addEventListener("input", () => renderTasks());
 taskFilterPerson.addEventListener("change", () => renderTasks());
@@ -306,6 +322,8 @@ function createProject(name, kind = PROJECT_KIND_GAMEDEV) {
     teamRoles: [],
     codeFiles: [],
     activeCodeFileId: "",
+    levelWorkspaces: [],
+    activeLevelWorkspaceId: "",
     items: [],
     connections: []
   };
@@ -352,7 +370,27 @@ boardGridBtn.addEventListener("click", () => toggleBoardGrid());
 boardThemeBtn.addEventListener("click", () => toggleBoardTheme());
 createColor.addEventListener("input", (event) => {
   createColor.value = normalizeHexColor(event.target.value, ticketColors[0]);
+  syncGameJamColorPalette();
   if (drawMode) renderPropertiesPanel();
+});
+gameJamColorToggle.addEventListener("click", (event) => {
+  event.stopPropagation();
+  const open = gameJamColorPalette.classList.contains("hidden");
+  gameJamColorPalette.classList.toggle("hidden", !open);
+  gameJamColorToggle.setAttribute("aria-expanded", String(open));
+});
+gameJamColorButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    createColor.value = normalizeHexColor(button.dataset.gamejamColor, ticketColors[0]);
+    syncGameJamColorPalette();
+    gameJamColorPalette.classList.add("hidden");
+    gameJamColorToggle.setAttribute("aria-expanded", "false");
+  });
+});
+document.addEventListener("pointerdown", (event) => {
+  if (event.target.closest(".gamejam-color-control")) return;
+  gameJamColorPalette.classList.add("hidden");
+  gameJamColorToggle.setAttribute("aria-expanded", "false");
 });
 connectionStylePanel.addEventListener("pointerdown", (event) => event.stopPropagation());
 connectionColor.addEventListener("input", (event) => updateSelectedConnections({ color: event.target.value }));
@@ -443,8 +481,6 @@ milestonesDrawerToggle.addEventListener("click", () => toggleSidePanel("mileston
 historyDrawerToggle.addEventListener("click", () => toggleSidePanel("history"));
 closeWorkspaceDrawer.addEventListener("click", () => closeDrawer("workspace"));
 closeSideDrawer.addEventListener("click", () => closeDrawer("side"));
-addLevelDesignBoard.addEventListener("click", () => addDesignBoardTemplate("level"));
-addCharacterDesignBoard.addEventListener("click", () => addDesignBoardTemplate("character"));
 
 milestoneForm.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -474,8 +510,19 @@ taskForm.addEventListener("submit", (event) => {
   event.preventDefault();
   const title = taskTitle.value.trim();
   if (!title) return;
-  addTaskColumn(title);
+  const project = getActiveProject();
+  if (!project) return;
+  const firstColumn = getOrderedTaskColumns(project)[0];
+  if (!firstColumn) return;
+  addTaskToColumn(firstColumn.id, title);
   taskTitle.value = "";
+});
+taskColumnForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const title = taskColumnTitle.value.trim();
+  if (!title) return;
+  addTaskColumn(title);
+  taskColumnTitle.value = "";
 });
 }
 

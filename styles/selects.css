@@ -1,0 +1,177 @@
+/* Final shared treatment for every native dropdown in FlowBoard. */
+select,
+.template-select,
+.font-select,
+.property-section select,
+.compact-form select,
+.kanban-filter-bar select,
+.code-editor-toolbar select {
+  width: 100%;
+  height: 40px;
+  min-height: 40px;
+  min-width: 0;
+  appearance: none;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background-color: var(--panel);
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position:
+    calc(100% - 15px) 50%,
+    calc(100% - 10px) 50%;
+  background-repeat: no-repeat;
+  background-size: 5px 5px, 5px 5px;
+  color: var(--ink);
+  padding: 0 34px 0 12px;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(29, 39, 51, 0.06);
+  transition: border-color 140ms ease, box-shadow 140ms ease, background-color 140ms ease, color 140ms ease;
+}
+
+select:hover,
+.template-select:hover,
+.font-select:hover {
+  border-color: rgba(67, 75, 215, 0.62);
+  background-color: var(--panel-soft);
+}
+
+select:focus,
+select:focus-visible,
+.template-select:focus,
+.font-select:focus {
+  border-color: var(--accent);
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(67, 75, 215, 0.2);
+}
+
+select:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+select option {
+  background: var(--panel);
+  color: var(--ink);
+  font-weight: 700;
+}
+
+/* Chromium exposes the opened native picker through these progressive selectors. */
+@supports selector(::picker(select)) {
+  select,
+  ::picker(select) {
+    appearance: base-select;
+  }
+
+  select {
+    background-image: none;
+  }
+
+  select::picker-icon {
+    color: currentColor;
+    transition: transform 140ms ease;
+  }
+
+  select:open::picker-icon {
+    transform: rotate(180deg);
+  }
+
+  ::picker(select) {
+    margin-top: 6px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--panel);
+    padding: 6px;
+    box-shadow: 0 16px 34px rgba(29, 39, 51, 0.18);
+  }
+
+  select option {
+    min-height: 34px;
+    border-radius: 8px;
+    padding: 8px 10px;
+  }
+
+  select option:hover,
+  select option:focus,
+  select option:checked {
+    background: rgba(67, 75, 215, 0.14);
+    color: var(--accent-dark);
+  }
+}
+
+.topbar .template-select {
+  width: auto;
+  min-width: 132px;
+  border-color: rgba(255, 255, 255, 0.72);
+  background-color: #ffffff;
+  color: #252b9a;
+  box-shadow: 0 5px 14px rgba(24, 31, 80, 0.16);
+}
+
+.topbar .template-select:hover,
+.topbar .template-select:focus {
+  border-color: #ffffff;
+  background-color: #f4f2ff;
+  color: #252b9a;
+}
+
+.app.app-dark select,
+.app.app-dark .font-select,
+.app.app-dark .property-section select,
+.app.app-dark .compact-form select,
+.app.app-dark .kanban-filter-bar select,
+.app.app-dark .code-editor-toolbar select {
+  border-color: var(--dark-panel-line);
+  background-color: var(--dark-panel-field);
+  color: #f8fafc;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.24);
+}
+
+.app.app-dark select:hover,
+.app.app-dark .font-select:hover {
+  border-color: #7780ff;
+  background-color: #182235;
+}
+
+.app.app-dark select:focus,
+.app.app-dark select:focus-visible,
+.app.app-dark .font-select:focus {
+  border-color: #969aff;
+  box-shadow: 0 0 0 3px rgba(150, 154, 255, 0.22);
+}
+
+.app.app-dark select option {
+  background: var(--dark-panel-field);
+  color: #f8fafc;
+}
+
+@supports selector(::picker(select)) {
+  .app.app-dark ::picker(select) {
+    border-color: var(--dark-panel-line);
+    background: var(--dark-panel-field);
+    box-shadow: 0 18px 38px rgba(0, 0, 0, 0.42);
+  }
+
+  .app.app-dark select option:hover,
+  .app.app-dark select option:focus,
+  .app.app-dark select option:checked {
+    background: #20295f;
+    color: #ffffff;
+  }
+}
+
+.app.app-dark .topbar .template-select {
+  border-color: rgba(255, 255, 255, 0.34);
+  background-color: #182235;
+  color: #f8fafc;
+}
+
+.app.app-dark .topbar .template-select:hover,
+.app.app-dark .topbar .template-select:focus {
+  border-color: #969aff;
+  background-color: #20295f;
+  color: #ffffff;
+}

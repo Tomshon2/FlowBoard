@@ -9,7 +9,7 @@ const DEFAULT_DRAWING_THICKNESS = 4;
 const BOARD_GRID_SIZE = 28;
 const PROJECT_KIND_GAMEDEV = "gamedev";
 const PROJECT_KIND_GAMEJAM = "gamejam";
-const GAMEJAM_SHAPE_TOOLS = new Set(["rectangle", "circle", "diamond"]);
+const GAMEJAM_SHAPE_TOOLS = new Set(["square", "rectangle", "circle", "diamond"]);
 
 function getProjectKind(project = typeof getActiveProject === "function" ? getActiveProject() : null) {
   return project?.kind === PROJECT_KIND_GAMEJAM ? PROJECT_KIND_GAMEJAM : PROJECT_KIND_GAMEDEV;

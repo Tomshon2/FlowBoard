@@ -7,6 +7,8 @@
   renderTasks();
   renderHours();
   renderStory();
+  renderLevelWorkspaces();
+  renderCharacterWorkspaces();
   renderTeamRoles();
   renderCodeWorkspace();
   renderWorkspaceMembers();
@@ -38,6 +40,7 @@ function renderProjectModeUi() {
   const project = getActiveProject();
   const gameJam = isGameJamProject(project);
   app.classList.toggle("gamejam-mode", gameJam);
+  syncGameJamColorPalette();
   shapeTools.forEach((button) => {
     const allowed = isShapeToolAllowedForProject(button.dataset.shapeTool, project);
     button.classList.toggle("project-mode-hidden", !allowed);
@@ -75,19 +78,20 @@ function renderPropertiesPanel() {
 
   if (selectedBoards.length) {
     const editableBoards = selectedBoards.filter((item) => item.type !== "image");
-    const referenceBoard = editableBoards[0] || selectedBoard;
+    const styleableBoards = selectedBoards.filter((item) => item.type !== "image" || isLevelPreviewItem(item));
+    const referenceBoard = styleableBoards[0] || editableBoards[0] || selectedBoard;
     const isShape = referenceBoard.type === "shape";
     const isTable = referenceBoard.type === "table";
     propertiesTitle.textContent = selectedBoards.length > 1
       ? `${selectedBoards.length} selected boards`
-      : isTable ? referenceBoard.tableKind === "folder" ? "Folder" : "Table" : isShape ? getShapeLabel(referenceBoard.shape) : referenceBoard.type === "image" ? "Image" : "Board";
+      : isTable ? referenceBoard.tableKind === "folder" ? "Folder" : "Table" : isShape ? getShapeLabel(referenceBoard.shape) : isLevelPreviewItem(referenceBoard) ? "Level design board" : referenceBoard.type === "image" ? "Image" : "Board";
     const color = normalizeHexColor(referenceBoard.color || ticketColors[0]);
     propertiesBoardColor.value = color;
     propertiesBoardHex.value = color;
     propertiesBoardName.disabled = !editableBoards.length;
     propertiesBoardName.value = getBoardItemName(referenceBoard, "");
-    propertiesBoardBorderColor.disabled = !editableBoards.length;
-    propertiesBoardBorderThickness.disabled = !editableBoards.length;
+    propertiesBoardBorderColor.disabled = !styleableBoards.length;
+    propertiesBoardBorderThickness.disabled = !styleableBoards.length;
     propertiesBoardBorderColor.value = normalizeHexColor(referenceBoard.borderColor || "#1d2733", "#1d2733");
     propertiesBoardBorderThickness.value = String(clamp(Number(referenceBoard.borderThickness ?? (referenceBoard.type === "shape" ? 2 : 1)), 0, 14));
     propertiesBoardBorderThicknessLabel.textContent = `${propertiesBoardBorderThickness.value}px`;
@@ -99,8 +103,8 @@ function renderPropertiesPanel() {
       propertiesTableRows.value = String(table.rows);
       propertiesTableCols.value = String(table.cols);
     }
-    propertiesBoardColor.disabled = !editableBoards.length;
-    propertiesBoardHex.disabled = !editableBoards.length;
+    propertiesBoardColor.disabled = !styleableBoards.length;
+    propertiesBoardHex.disabled = !styleableBoards.length;
     propertiesBoardText.disabled = !editableBoards.length;
     propertiesFontFamily.disabled = !editableBoards.length;
     propertiesFontSize.disabled = !editableBoards.length;
@@ -153,6 +157,15 @@ function renderPropertiesPanel() {
     connectionSnapGrid.checked = isConnection && selectedConnection.snapToGrid === true;
     propertiesLineSnapGrid.checked = isConnection && selectedConnection.snapToGrid === true;
   }
+}
+
+function isLevelPreviewItem(item) {
+  return item?.type === "image" && Boolean(
+    item.levelWorkspaceId ||
+    item.boardRole === "level-preview" ||
+    item.levelPreviewTitle ||
+    /\blevel board$/i.test(String(item.name || item.text || "").trim())
+  );
 }
 
 function snapBoardValueToGrid(value, max) {
@@ -311,7 +324,7 @@ function getSelectedBoardItems(project = getActiveProject()) {
 function updateSelectedBoardColor(value) {
   if (!isValidHex(value)) return;
   const project = getActiveProject();
-  const items = getSelectedBoardItems(project).filter((item) => item.type !== "image");
+  const items = getSelectedBoardItems(project).filter((item) => item.type !== "image" || isLevelPreviewItem(item));
   if (!project || !items.length) return;
   const commands = [];
   items.forEach((item) => {
@@ -364,7 +377,7 @@ function applyItemBorderToNode(item, node) {
 
 function updateSelectedBoardBorder(style) {
   const project = getActiveProject();
-  const items = getSelectedBoardItems(project).filter((item) => item.type !== "image");
+  const items = getSelectedBoardItems(project).filter((item) => item.type !== "image" || isLevelPreviewItem(item));
   if (!project || !items.length) return;
   const commands = [];
   items.forEach((item) => {

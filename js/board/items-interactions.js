@@ -60,6 +60,7 @@ function addBoardItem(type, extra = {}, options = {}) {
     saveState({ projectId: project.id, forceStep: true });
     render();
   }
+  return item;
 }
 
 const designBoardTemplates = {

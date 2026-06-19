@@ -293,7 +293,7 @@ function exportProjectReportPdf() {
   const gdd = project.gdd || {};
   const hasCharacterList = Array.isArray(gdd.characters) && gdd.characters.length > 0;
   const characterText = Array.isArray(gdd.characters) && gdd.characters.length
-    ? gdd.characters.map((character) => `<strong>${escapeHtml(character.name || "Character")}</strong><br>${escapeHtml(character.description || "")}`).join("<br><br>")
+    ? gdd.characters.map((character) => `<strong>${escapeHtml(character.name || "Character")}</strong><br>${escapeHtml(character.story || character.description || "")}`).join("<br><br>")
     : typeof gdd.characters === "string" && gdd.characters ? gdd.characters : "Define main characters, enemies, NPCs, and bosses.";
   const gameDesignRows = [
     ["Concept", gdd.concept || "Define the core concept."],

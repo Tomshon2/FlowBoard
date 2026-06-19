@@ -204,7 +204,7 @@ function exportGameDesignDocumentPdf() {
   const tasks = (project.tasks || []).map((task) => `<tr><td>${escapeHtml(task.title)}</td><td>${escapeHtml(TASK_PRIORITIES[task.priority] || "Medium")}</td><td>${escapeHtml(task.deadline || "")}</td><td>${task.progress || 0}%</td></tr>`).join("");
   const team = (project.teamRoles || []).map((member) => `<tr><td>${escapeHtml(member.name || "Team member")}</td><td>${escapeHtml(member.role || "")}</td><td>${escapeHtml(member.notes || "")}</td></tr>`).join("");
   const characters = gdd.characters.length
-    ? gdd.characters.map((character) => `<li><strong>${escapeHtml(character.name)}</strong><br>${escapeHtml(character.description || "")}</li>`).join("")
+    ? gdd.characters.map((character) => `<li><strong>${escapeHtml(character.name)}</strong><br>${escapeHtml(character.story || character.description || "")}</li>`).join("")
     : "<li>Define main characters, enemies, NPCs, and bosses.</li>";
   const totalHours = Number(project.totalHours || 0);
   const hours = getOrderedHourPhases(project).map((phase) => `

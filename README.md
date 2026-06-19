@@ -39,6 +39,7 @@ FlowBoard is a visual collaborative planning tool for small game-development tea
 - `js/team/`: team roles and workspace member display.
 - `js/services/`: Supabase client setup, Storage upload helpers, and export/import.
 - `js/utils/`: text formatting, sanitizing, validation helpers, and small utilities.
+- `DEVELOPER_GUIDE.md`: architecture, state contracts, feature map, themes, project modes, and the required change checklist.
 
 ## Configure Supabase
 
