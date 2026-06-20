@@ -40,6 +40,8 @@ function renderProjectModeUi() {
   const project = getActiveProject();
   const gameJam = isGameJamProject(project);
   app.classList.toggle("gamejam-mode", gameJam);
+  storyDrawerToggle.title = gameJam ? "Concept" : "Game story";
+  storyDrawerToggle.setAttribute("aria-label", storyDrawerToggle.title);
   syncGameJamColorPalette();
   shapeTools.forEach((button) => {
     const allowed = isShapeToolAllowedForProject(button.dataset.shapeTool, project);
@@ -49,7 +51,7 @@ function renderProjectModeUi() {
   if (gameJam && activeShapeTool && !isShapeToolAllowedForProject(activeShapeTool, project)) {
     setActiveShapeTool(null);
   }
-  if (gameJam && !["hours", "tasks", "code", "story"].includes(activeSidePanel)) {
+  if (gameJam && !["hours", "tasks", "code", "story", "team"].includes(activeSidePanel)) {
     activeSidePanel = "hours";
     sideDrawer.dataset.mode = activeSidePanel;
   }

@@ -51,6 +51,11 @@
             <svg viewBox="0 0 24 24"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2h6.5A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5Z"/><path d="M3 10h18"/></svg>
           </span>
         </button>
+        <button id="story-drawer-toggle" class="drawer-toggle drawer-toggle-right" type="button" aria-expanded="false" aria-controls="side-drawer" title="Game story">
+          <span class="toggle-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M5 5.5A2.5 2.5 0 0 1 7.5 3H20v16H7.5A2.5 2.5 0 0 0 5 21Z"/><path d="M5 5.5V21"/><path d="M9 7h7"/><path d="M9 11h6"/></svg>
+          </span>
+        </button>
         <button id="hours-drawer-toggle" class="drawer-toggle drawer-toggle-right" type="button" aria-expanded="false" aria-controls="side-drawer" title="Project hours">
           <span class="toggle-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg>
@@ -64,11 +69,6 @@
         <button id="code-drawer-toggle" class="drawer-toggle drawer-toggle-right" type="button" aria-expanded="false" aria-controls="side-drawer" title="Code workspace">
           <span class="toggle-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24"><path d="m8 9-4 3 4 3"/><path d="m16 9 4 3-4 3"/><path d="m14 5-4 14"/></svg>
-          </span>
-        </button>
-        <button id="story-drawer-toggle" class="drawer-toggle drawer-toggle-right" type="button" aria-expanded="false" aria-controls="side-drawer" title="Game story">
-          <span class="toggle-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M5 5.5A2.5 2.5 0 0 1 7.5 3H20v16H7.5A2.5 2.5 0 0 0 5 21Z"/><path d="M5 5.5V21"/><path d="M9 7h7"/><path d="M9 11h6"/></svg>
           </span>
         </button>
         <button id="level-design-drawer-toggle" class="drawer-toggle drawer-toggle-right" type="button" aria-expanded="false" aria-controls="side-drawer" title="Level design">
@@ -107,6 +107,7 @@
             </div>
           </div>
           <div class="brand-actions">
+            <span id="project-count" class="counter">0</span>
             <button id="close-workspace-drawer" class="icon-text small ghost-button drawer-internal-close" type="button">&lt;</button>
           </div>
         </div>
@@ -119,6 +120,12 @@
           </select>
           <button type="submit">Create</button>
         </form>
+
+        <label class="import-project-button">
+          <span aria-hidden="true">↑</span>
+          Import project
+          <input id="project-import-input" type="file" accept="application/json,.json" />
+        </label>
 
         <div id="projects-list" class="projects-list"></div>
       </aside>
@@ -478,24 +485,6 @@
                 <option value="critical">Critical</option>
               </select>
             </div>
-            <div class="kanban-actions-tab">
-              <button id="data-actions-toggle" class="kanban-actions-toggle" type="button" aria-expanded="false" aria-controls="kanban-data-actions">Export / Import</button>
-              <div id="kanban-data-actions" class="kanban-data-actions hidden" aria-label="Task and project data actions">
-                <button id="export-board-png-btn" type="button">Board PNG</button>
-                <button id="export-board-pdf-btn" type="button">Board PDF</button>
-                <button id="export-project-json-btn" type="button">Project + Tasks JSON</button>
-                <button id="export-project-report-btn" type="button">Project report</button>
-                <button id="export-gdd-pdf-btn" type="button">GDD PDF</button>
-                <label class="import-chip">
-                  Import JSON
-                  <input id="import-project-json-input" type="file" accept="application/json,.json" />
-                </label>
-                <label class="import-chip">
-                  Import CSV
-                  <input id="import-tasks-csv-input" type="file" accept=".csv,text/csv" />
-                </label>
-              </div>
-            </div>
             <div class="kanban-create-row">
               <form id="task-form" class="compact-form kanban-task-form">
                 <input id="task-title" type="text" placeholder="Add task" />
@@ -603,7 +592,6 @@
                     <button id="code-analyze-button" type="button">Analyze</button>
                   </div>
                   <div id="code-analysis-metrics" class="code-analysis-metrics"></div>
-                  <div id="code-analysis-findings" class="code-analysis-findings"></div>
                 </section>
               </div>
             </div>
@@ -647,6 +635,7 @@
             <div class="section-copy">
               <h2>Level Design Board</h2>
             </div>
+            <span id="level-count" class="counter">0</span>
           </div>
           <div id="level-design-content" class="panel-content">
             <form id="level-workspace-form" class="level-workspace-form">
@@ -665,6 +654,7 @@
             <div class="section-copy">
               <h2>Character Design Board</h2>
             </div>
+            <span id="character-count" class="counter">0</span>
           </div>
           <div id="character-design-content" class="panel-content">
             <form id="character-workspace-form" class="character-workspace-form">
@@ -692,15 +682,6 @@
               <label>
                 Genre
                 <input id="gdd-genre" type="text" placeholder="Define genre" />
-              </label>
-              <label>
-                Characters
-                <div id="gdd-character-list" class="gdd-character-list"></div>
-                <button id="gdd-add-character" class="gdd-add-character" type="button">+ Character</button>
-              </label>
-              <label>
-                Mechanics
-                <textarea id="gdd-mechanics" rows="3" placeholder="Movement, combat, progression, economy..."></textarea>
               </label>
             </section>
             <form id="story-root-form" class="compact-form">

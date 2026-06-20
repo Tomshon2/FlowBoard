@@ -9,7 +9,7 @@ FlowBoard is a static browser application for collaborative game planning. It ha
 - **Game Dev**: the complete long-form project workspace.
 - **Game Jam**: a reduced workspace for short events and smaller scope.
 
-Game Jam uses a restricted Shapes menu that includes Square, Rectangle, Circle, and Diamond. Its creation-color control exposes exactly ten saturated swatches: red, orange, yellow, green, blue, purple, black, white, cyan, and pink. Game Dev keeps the unrestricted color picker.
+Game Jam uses a restricted Shapes menu that includes Square, Rectangle, Circle, and Diamond. Its creation-color control exposes exactly ten saturated swatches: red, orange, yellow, green, blue, purple, black, white, cyan, and pink. Game Dev keeps the unrestricted color picker. The Game Jam product scope described in this guide is complete; future work in that mode should be treated as maintenance or a newly approved feature rather than unfinished baseline work.
 
 The main product surfaces are:
 
@@ -22,7 +22,7 @@ The main product surfaces are:
 - Character Design workspaces.
 - Team roles and workspace members.
 - Milestones and project history.
-- JSON/CSV/image/PDF import and export.
+- Complete project JSON import/export, task CSV import, board PNG export, and printable project reports.
 - Supabase authentication, shared workspace persistence, Storage images, Realtime state updates, and live cursors.
 
 ## Runtime Architecture
@@ -56,7 +56,7 @@ Do not move a script earlier unless all globals it reads already exist. A functi
 ### Core state
 
 - `js/core/project-defaults.js`: project kinds, allowed Game Jam shapes, starter columns, hour plan, milestones, and `defaultState`.
-- `js/core/app-core.js`: global UI/runtime state, DOM references, event listeners, and `createProject()`.
+- `js/core/app-core.js`: global UI/runtime state, DOM references, project creation, the project-library JSON import entry point, and shared event listeners.
 - `js/core/state-history.js`: `normalizeState()`, local/remote saves, timestamps, history commands, undo/redo, and `getActiveProject()`.
 - `js/core/bootstrap.js`: startup sequence.
 
@@ -75,20 +75,20 @@ Do not move a script earlier unless all globals it reads already exist. A functi
 
 ### Feature workspaces
 
-- `js/tasks/tasks-board.js`: Kanban columns, task cards, filters, issue dialog, links, dependencies, and checklist data. The Actions board has separate top-level forms for **Add task** and **Add status**; their controls share one aligned row and stack at narrow drawer widths.
+- `js/tasks/tasks-board.js`: Kanban columns, task cards, filters, issue dialog, links, dependencies, progress, priority, deadline, and people. Status appears at the top of the issue sidebar. Tags and checklist controls are intentionally absent from the current issue UI, although legacy normalized data remains compatible. Game Dev has separate top-level **Add task** and **Add status** forms. Game Jam hides both top-level forms and creates tasks only from each column's **Add item** control.
 - `js/tasks/hours-board.js`: hour phases, tasks, percentages, and final/edit displays.
-- `js/code/code-workspace.js`: project code files, split saved/draft comparison, syntax highlighting, Git-style line diff, import/download, and local analysis. Code mode uses reduced drawer top padding so the workspace starts near the top.
+- `js/code/code-workspace.js`: project code files, split saved/draft comparison, syntax highlighting, Git-style line diff, import/download, and local analysis. Applying changes updates the draft code and filename together after confirmation. Blank-only diff rows are not highlighted as changes, and the analysis summary intentionally omits the old TODO metric and verbose findings block. Code mode uses reduced drawer top padding so the workspace starts near the top.
 - `js/story/story-board.js`: GDD fields, shared character summary cards, and nested story nodes.
 - `js/story/character-workspace.js`: rich character profiles, images, story, personality, abilities, notes, and main-board links.
 - `js/story/level-workspace.js`: multiple levels, level document, embedded note/image/paint canvas, and main-board snapshot creation.
-- `js/team/team-board.js`: project team roles and shared workspace member UI.
+- `js/team/team-board.js`: project team roles and shared workspace member UI. Team roles are available to both Game Dev and Game Jam projects.
 
 ### Persistence and exports
 
 - `js/auth/auth-realtime.js`: sign-in flow, workspace loading, member management, invites, Realtime state, and cursors.
 - `js/services/workspaceService.js`: workspace/member database calls.
 - `js/services/storageService.js`: image upload and public URL creation.
-- `js/services/export-import.js`: JSON, CSV, board image, printable board, and project reports.
+- `js/services/export-import.js`: complete project JSON backup/restore, task CSV import, board PNG rendering, and printable project reports. The project-file chooser exposes Board PNG, Project report, and Project JSON.
 - `supabase-schema.sql`: tables, policies, functions, Realtime, and Storage rules.
 
 ## State Contract
@@ -128,6 +128,20 @@ Important rules:
 - Workspace state is saved locally and, when signed in, as `workspaces.state` through Supabase.
 - Invite and logout actions live in the main top bar. The invite form is a popover anchored below the Invite button; do not place account actions back inside the Projects drawer.
 
+## Project Library And Export Contract
+
+The Projects drawer owns project creation, project switching, favorites, rename/delete actions, and file operations.
+
+- New project name, project type, and Create remain on one row.
+- **Import project** is a separate visible action below that row. It accepts a complete FlowBoard JSON backup, assigns a new project id, normalizes legacy or missing fields, selects the imported project, and preserves its boards, drawings, connections, tasks, statuses, team roles, hours, GDD, characters, story, levels, code, milestones, and history.
+- Each project row has an **Export** action. Its dialog exposes only **Board PNG**, **Project report**, and **Project JSON**. Task CSV remains an import utility inside that dialog rather than a primary project export.
+- Project JSON is the canonical restorable backup. Keep it lossless when new project-owned fields are introduced, and keep the importer backward compatible.
+- Project reports keep the project name, project type, and generation date at the top. Game Dev section order is: Game Design Document, Story, Characters, Board, Levels, Tasks, Hours, Team Roles, Milestones, Code Files, then Project History last. Game Jam keeps Concept and Genre in the Game Design Document, then Board, Tasks, Hours, Team Roles, and Project History; it omits Mechanics, Story, Characters, Levels, Milestones, and Code Files.
+- Printable reports use page margins on every page, suppress the browser URL/header text, and show a clean centered page number in the bottom margin.
+- Board PNG includes board items, imported/pasted images, regenerated Level Design previews and their note images, connections, freehand drawings, current light/dark canvas background, current grid visibility, borders, automatic level titles, and computed board text styling. Remote Storage images are embedded before rasterization. Text must wrap and remain inside each shape. Wait for browser fonts before rasterizing the SVG.
+
+Theme preference and Supabase workspace membership are user/workspace concerns, not project-owned JSON fields. Project team-role records are included in the backup.
+
 ## Save And History Contract
 
 Use these patterns:
@@ -142,7 +156,7 @@ Capture `before` with `structuredClone()` before mutation. Use a stable `groupKe
 
 Do not call `saveState()` on every pointer movement. Render the live preview in the DOM, then save once on pointer release.
 
-Code comparison drafts are intentionally transient. Typing or pasting into **Paste new code** updates only `codeCompareDrafts`; it must not mutate `project.codeFiles`. **Apply new code** and `Ctrl+S` copy the draft into the active file and create one undoable history step. Switching files preserves each draft for the current browser session, while reloading discards unapplied drafts.
+Code comparison drafts are intentionally transient. Typing or pasting into **Paste new code** updates only `codeCompareDrafts`; it must not mutate `project.codeFiles`. **Apply** and `Ctrl+S` first show the shared confirmation dialog, then apply both the candidate filename and draft contents in one undoable history step. Switching files preserves each draft for the current browser session, while reloading discards unapplied drafts.
 
 ## Render Contract
 
@@ -170,7 +184,7 @@ Board geometry lives on each item as `x`, `y`, `width`, and `height` in a `6400 
 - Level-document boards are different: `.level-document-board .item-text` is content-sized. Resizing the outer document must not stretch a short text region.
 - Level preview boards are styleable image boards. Their Fill Color, Border Color, and Border Thickness controls are enabled in Properties; ordinary imported images remain non-styleable there.
 - A board may grow to prevent text clipping, but it should not grow merely because another nearby board is larger.
-- Images preserve their own visual area and have an optional caption.
+- Imported images use their full board area and do not have editable captions or image-text controls in either project mode.
 - Connections must re-render after item position or size changes.
 
 When adding a specialized board type, add an explicit class or field instead of changing the behavior of every ticket.
@@ -202,7 +216,7 @@ The embedded canvas and pasted preview intentionally have no grid. **Clear Board
 - An image snapshot of the level design.
 - A content-sized editable level-document ticket placed beside it.
 
-Level preview images use `.level-preview-board`, not the generic imported-image caption layout. They have a compact, always-visible `.level-preview-title`, a large design image, and a compact editable text strip at the bottom. The preview SVG is transparent so the Properties Fill Color controls the board background. Notes, images, and drawings must remain inside the image area and never overlap the title.
+Level preview images use `.level-preview-board`. They have a compact, always-visible automatic `.level-preview-title` and a design image that fills the remaining area. They do not have an editable caption or text strip. The preview SVG is transparent so the Properties Fill Color controls the board background. Notes, images, and drawings must remain inside the image area and never overlap the title.
 
 Tasks and characters connect directly to main-board elements, including pasted level previews:
 
@@ -233,17 +247,18 @@ The canonical constants and helpers are in `js/core/project-defaults.js`.
 | Surface | Game Dev | Game Jam |
 | --- | --- | --- |
 | Main board | Full tools | Reduced shape set |
-| Allowed shape tools | All registered tools | Rectangle, circle, diamond |
+| Allowed shape tools | All registered tools | Square, rectangle, circle, diamond |
 | Hours | Full, edit/final modes | Visible, simplified UI |
-| Tasks | Visible | Visible |
+| Tasks | Custom columns and top-level creation | Fixed To do, In progress, Done; create inside columns |
 | Code | Visible | Visible |
-| Story/GDD | Visible | Visible |
+| Story/GDD | Full GDD, characters, and story tree | Concept and Genre only |
 | Level Design | Visible | Hidden |
 | Character Design | Visible | Hidden |
-| Team roles | Visible | Hidden |
+| Team roles | Visible | Visible |
 | Milestones | Visible | Hidden |
 | History | Visible | Hidden |
 | Templates | Visible | Hidden |
+| Project report | Complete report including code and milestones | Report without code and milestones |
 
 Mode enforcement exists in two layers:
 
@@ -251,6 +266,24 @@ Mode enforcement exists in two layers:
 - CSS: `.app.gamejam-mode ...` hides unavailable controls.
 
 Do not rely only on CSS. Hidden features must also be blocked or redirected in JavaScript.
+
+## Game Jam Completion Status
+
+**Status: complete as of 20 June 2026.**
+
+The completed Game Jam baseline is:
+
+- Restricted Square, Rectangle, Circle, and Diamond shape menu.
+- Ten-color creation palette plus drawing, image import, connections, selection, properties, zoom/pan, and light/dark board modes.
+- Fixed Actions columns: To do, In progress, and Done. Columns cannot be added, renamed, recolored, or deleted in Game Jam. Tasks are added from the **Add item** control inside a column; the top-level task/status creation row is hidden.
+- Simplified Hours view.
+- Game Story panel available with Concept and Genre only. Character creation, Mechanics, the story-division form/tree, and the story counter are hidden and their mutation paths are blocked.
+- Code and Team roles available.
+- Level Design, Character Design, Milestones, History, Templates, and their direct access paths hidden or redirected.
+- Complete JSON backup/restore and Board PNG export available, including ordinary images and Level Design preview images.
+- Game Jam project report contains Concept and Genre but excludes Mechanics, Story, Characters, Levels, Code files, and Milestones while retaining all other relevant project sections.
+
+“Complete” describes the agreed feature scope, not an exemption from the theme, responsive, persistence, undo/redo, import/export, accessibility, or regression checks in this guide.
 
 ## Theme Contract
 
@@ -318,7 +351,7 @@ Use this sequence:
 - The entire workspace state is one JSON document, so concurrent edits can conflict.
 - Remote updates are last-write based, with timestamp/conflict warnings rather than record-level merging.
 - Undo/redo is a hybrid of command and full-state snapshots.
-- Board PNG/PDF export approximates the interactive canvas and does not reproduce every DOM detail.
+- Board PNG export uses a generated SVG rather than a screenshot. It reproduces canvas theme/grid state, drawings, connections, item geometry, imported and level-preview images, borders, automatic level titles, and computed board text typography, but specialized DOM-only controls and editing chrome are intentionally excluded. Cross-origin image URLs must be fetched and embedded before the SVG is rasterized.
 - A pasted level preview keeps a stored SVG fallback, but its displayed image is regenerated from the source level during main-board rendering when `levelWorkspaceId` still resolves.
 - Base64 image fallbacks can increase local state size when Storage is unavailable.
 

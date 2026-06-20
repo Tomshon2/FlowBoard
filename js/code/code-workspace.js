@@ -26,7 +26,6 @@ const codeCursorPosition = document.querySelector("#code-cursor-position");
 const codeSaveStatus = document.querySelector("#code-save-status");
 const codeAnalyzeButton = document.querySelector("#code-analyze-button");
 const codeAnalysisMetrics = document.querySelector("#code-analysis-metrics");
-const codeAnalysisFindings = document.querySelector("#code-analysis-findings");
 
 const CODE_FILE_MAX_BYTES = 1024 * 1024;
 const CODE_FILE_LIMIT = 60;
@@ -64,7 +63,17 @@ function initializeCodeWorkspace() {
     codeImportInput.value = "";
   });
   codeFileSearch.addEventListener("input", () => renderCodeFileList(getActiveProject()));
-  codeActiveFileName.addEventListener("change", () => renameActiveCodeFile(codeActiveFileName.value));
+  codeActiveFileName.addEventListener("input", () => {
+    const file = getActiveCodeFile();
+    if (!file) return;
+    updateCodeApplyState(file);
+    codeSaveStatus.textContent = "Name not applied";
+  });
+  codeActiveFileName.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    applyCodeComparisonDraft();
+  });
   codeLanguage.addEventListener("change", () => updateActiveCodeLanguage(codeLanguage.value));
   codeCopyButton.addEventListener("click", () => copyActiveCodeFile());
   codeDownloadButton.addEventListener("click", () => downloadActiveCodeFile());
@@ -239,24 +248,6 @@ async function importCodeFiles(fileList) {
     : `${imported} file${imported === 1 ? "" : "s"} imported`;
 }
 
-function renameActiveCodeFile(rawName) {
-  const project = getActiveProject();
-  const file = getActiveCodeFile(project);
-  if (!project || !file) return;
-  const nextName = getUniqueCodeFileName(project, sanitizeCodeFileName(rawName, file.name), file.id);
-  if (nextName === file.name) return;
-  const before = structuredClone(file);
-  file.name = nextName;
-  file.language = detectCodeLanguage(nextName, file.language);
-  file.modifiedAt = Date.now();
-  saveState({
-    historyEntry: createHistoryCommand("updateProject", project.id, { codeFiles: project.codeFiles.map((candidate) => candidate.id === file.id ? before : candidate) }, { codeFiles: structuredClone(project.codeFiles) }, {
-      groupKey: `project:${project.id}:code:${file.id}:rename`
-    })
-  });
-  renderCodeWorkspace();
-}
-
 function updateActiveCodeLanguage(language) {
   const project = getActiveProject();
   const file = getActiveCodeFile(project);
@@ -304,26 +295,51 @@ function clearCodeComparisonDraft() {
   codeEditor.focus();
 }
 
-function applyCodeComparisonDraft() {
+async function applyCodeComparisonDraft() {
   const project = getActiveProject();
   const file = getActiveCodeFile(project);
-  if (!project || !file || !codeCompareDrafts.has(file.id)) return;
+  if (!project || !file) return;
+  const hasCodeDraft = codeCompareDrafts.has(file.id);
+  const nextContent = hasCodeDraft ? codeCompareDrafts.get(file.id) || "" : file.content;
+  const nextName = getUniqueCodeFileName(project, sanitizeCodeFileName(codeActiveFileName.value, file.name), file.id);
+  const codeChanged = hasCodeDraft && nextContent !== file.content;
+  const nameChanged = nextName !== file.name;
+  if (!codeChanged && !nameChanged) return;
+  const changeDescription = codeChanged && nameChanged
+    ? `Replace the saved code and rename ${file.name} to ${nextName}?`
+    : codeChanged
+      ? `Replace the saved contents of ${file.name} with the pasted code?`
+      : `Rename ${file.name} to ${nextName}?`;
+  const confirmed = await confirmDangerousAction(
+    `${changeDescription} You can undo this afterward.`,
+    {
+      eyebrow: "Confirm file update",
+      title: "Apply file changes?",
+      confirmLabel: "Apply changes"
+    }
+  );
+  if (!confirmed) {
+    codeSaveStatus.textContent = "Apply cancelled";
+    return;
+  }
   const before = {
     codeFiles: structuredClone(project.codeFiles),
     history: structuredClone(project.history || [])
   };
-  file.content = codeCompareDrafts.get(file.id) || "";
+  file.content = nextContent;
+  file.name = nextName;
+  file.language = detectCodeLanguage(nextName, file.language);
   file.modifiedAt = Date.now();
   codeCompareDrafts.delete(file.id);
-  logProjectEvent("Code comparison applied", file.name, file.id);
+  logProjectEvent("Code file updated", file.name, file.id);
   saveState({
     historyEntry: createHistoryCommand("updateProject", project.id, before, {
       codeFiles: structuredClone(project.codeFiles),
       history: structuredClone(project.history || [])
-    }, { projectId: project.id, groupKey: `project:${project.id}:code:${file.id}:apply-diff` }),
+    }, { projectId: project.id, groupKey: `project:${project.id}:code:${file.id}:apply-changes` }),
     forceStep: true
   });
-  codeSaveStatus.textContent = "New code applied";
+  codeSaveStatus.textContent = "File changes applied";
   renderCodeWorkspace();
 }
 
@@ -334,8 +350,19 @@ function renderCodeComparison(file = getActiveCodeFile()) {
   codeCurrentHighlight.innerHTML = renderHighlightedCodeLines(file.content || "", file.language, true);
   codeDraftHighlight.innerHTML = renderHighlightedCodeLines(draft, file.language, false);
   codeClearDraftButton.disabled = !hasDraft;
-  codeApplyDraftButton.disabled = !hasDraft || draft === file.content;
+  updateCodeApplyState(file);
   renderCodeDiff(file, draft);
+}
+
+function updateCodeApplyState(file = getActiveCodeFile()) {
+  if (!file) {
+    codeApplyDraftButton.disabled = true;
+    return;
+  }
+  const project = getActiveProject();
+  const nextName = getUniqueCodeFileName(project, sanitizeCodeFileName(codeActiveFileName.value, file.name), file.id);
+  const codeChanged = codeCompareDrafts.has(file.id) && codeEditor.value !== file.content;
+  codeApplyDraftButton.disabled = !codeChanged && nextName === file.name;
 }
 
 function renderHighlightedCodeLines(content, language, showNumbers) {
@@ -396,14 +423,15 @@ function renderCodeDiff(file, draft) {
     return;
   }
   const diff = buildCodeLineDiff(file.content || "", draft);
-  const additions = diff.filter((row) => row.type === "add").length;
-  const removals = diff.filter((row) => row.type === "remove").length;
+  const additions = diff.filter((row) => row.type === "add" && row.text.trim()).length;
+  const removals = diff.filter((row) => row.type === "remove" && row.text.trim()).length;
   codeDiffSummary.textContent = `+${additions} -${removals}`;
   diff.slice(0, 1200).forEach((row) => {
     const line = document.createElement("div");
-    line.className = `code-diff-row ${row.type}`;
+    const blankChange = row.type !== "context" && !row.text.trim();
+    line.className = `code-diff-row ${blankChange ? "blank" : row.type}`;
     line.innerHTML = `
-      <span class="code-diff-marker">${row.type === "add" ? "+" : row.type === "remove" ? "-" : " "}</span>
+      <span class="code-diff-marker">${blankChange ? " " : row.type === "add" ? "+" : row.type === "remove" ? "-" : " "}</span>
       <span class="code-diff-number">${row.oldNumber || ""}</span>
       <span class="code-diff-number">${row.newNumber || ""}</span>
       <code class="code-diff-code">${highlightCode(row.text, file.language) || " "}</code>`;
@@ -533,16 +561,13 @@ function updateCodeCursorPosition() {
 
 function renderCodeAnalysis(file = getActiveCodeFile()) {
   codeAnalysisMetrics.innerHTML = "";
-  codeAnalysisFindings.innerHTML = "";
   const content = file?.content || "";
   const lines = content ? content.split("\n") : [""];
-  const todoCount = (content.match(/\b(?:TODO|FIXME|HACK)\b/gi) || []).length;
   const functionCount = countCodeFunctions(content, file?.language);
   [
     [lines.length, "Lines"],
     [content.length, "Characters"],
-    [functionCount, "Functions"],
-    [todoCount, "TODOs"]
+    [functionCount, "Functions"]
   ].forEach(([value, label]) => {
     const metric = document.createElement("div");
     metric.className = "code-metric";
@@ -554,57 +579,6 @@ function renderCodeAnalysis(file = getActiveCodeFile()) {
     codeAnalysisMetrics.append(metric);
   });
 
-  const findings = analyzeCodeContent(file);
-  findings.forEach((finding) => {
-    const row = document.createElement("p");
-    row.className = `code-finding ${finding.level}`;
-    row.textContent = finding.message;
-    codeAnalysisFindings.append(row);
-  });
-}
-
-function analyzeCodeContent(file) {
-  if (!file || !file.content.trim()) return [{ level: "warning", message: "This file is empty." }];
-  const content = file.content;
-  const findings = [];
-  const longLines = content.split("\n").filter((line) => line.length > 120).length;
-  const trailingWhitespace = content.split("\n").filter((line) => /\s+$/.test(line)).length;
-  const todoCount = (content.match(/\b(?:TODO|FIXME|HACK)\b/gi) || []).length;
-
-  if (file.language === "json") {
-    try {
-      JSON.parse(content);
-      findings.push({ level: "ok", message: "Valid JSON syntax." });
-    } catch (error) {
-      findings.push({ level: "error", message: `JSON syntax: ${error.message}` });
-    }
-  } else if (file.language === "javascript") {
-    if (/^\s*(?:import|export)\s/m.test(content)) {
-      findings.push({ level: "warning", message: "ES module syntax detected. Static browser parsing is limited for this file." });
-    } else {
-      try {
-        new Function(content);
-        findings.push({ level: "ok", message: "JavaScript syntax parsed successfully. The code was not executed." });
-      } catch (error) {
-        findings.push({ level: "error", message: `JavaScript syntax: ${error.message}` });
-      }
-    }
-  } else if (["css", "cpp", "csharp", "java", "gdscript"].includes(file.language)) {
-    const balance = countCharacter(content, "{") - countCharacter(content, "}");
-    findings.push(balance === 0
-      ? { level: "ok", message: "Opening and closing braces are balanced." }
-      : { level: "error", message: `Brace balance is ${balance > 0 ? `${balance} opening` : `${Math.abs(balance)} closing`} brace(s) off.` });
-  } else {
-    findings.push({ level: "ok", message: `${CODE_LANGUAGES[file.language]?.label || "Text"} file loaded for review.` });
-  }
-
-  if (todoCount) findings.push({ level: "warning", message: `${todoCount} TODO/FIXME/HACK marker(s) found.` });
-  if (longLines) findings.push({ level: "warning", message: `${longLines} line(s) are longer than 120 characters.` });
-  if (trailingWhitespace) findings.push({ level: "warning", message: `${trailingWhitespace} line(s) contain trailing whitespace.` });
-  if (!todoCount && !longLines && !trailingWhitespace && !findings.some((finding) => finding.level === "error")) {
-    findings.push({ level: "ok", message: "No basic formatting warnings found." });
-  }
-  return findings;
 }
 
 function countCodeFunctions(content, language = "plaintext") {
@@ -654,8 +628,4 @@ function getUniqueCodeFileName(project, requestedName, ignoredFileId = "") {
     candidate = `${directory}${base} (${suffix})${extension}`;
   }
   return candidate;
-}
-
-function countCharacter(value, character) {
-  return value.split(character).length - 1;
 }

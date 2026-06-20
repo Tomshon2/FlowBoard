@@ -40,7 +40,6 @@ function addBoardItem(type, extra = {}, options = {}) {
     color: type === "image" ? "#ffffff" : getCreationColor(),
     borderColor: "#1d2733",
     borderThickness: isShape ? 2 : 1,
-    captionOpen: type !== "image",
     ...extra
   };
   project.items.push(item);
@@ -207,8 +206,7 @@ function createTemplateBoard(node, origin) {
     html: text,
     color: getCreationColor(),
     borderColor: "#1d2733",
-    borderThickness: 1,
-    captionOpen: true
+    borderThickness: 1
   };
 }
 

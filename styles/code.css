@@ -573,7 +573,7 @@
 
 .code-analysis-metrics {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
 }
 
@@ -606,41 +606,12 @@
   white-space: nowrap;
 }
 
-.code-analysis-findings {
-  display: grid;
-  gap: 6px;
-}
-
-.code-finding {
-  margin: 0;
-  border-left: 3px solid #64748b;
-  background: var(--panel-soft);
-  color: var(--ink);
-  padding: 8px 9px;
-  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
-  font-size: 11px;
-  line-height: 1.4;
-}
-
-.code-finding.ok {
-  border-left-color: #03943a;
-}
-
-.code-finding.warning {
-  border-left-color: #b77900;
-}
-
-.code-finding.error {
-  border-left-color: #b42318;
-}
-
 .app.app-dark .code-import-button,
 .app.app-dark .code-file-tab,
 .app.app-dark .code-icon-button,
 .app.app-dark .code-editor-toolbar,
 .app.app-dark .code-status-bar,
-.app.app-dark .code-metric,
-.app.app-dark .code-finding {
+.app.app-dark .code-metric {
   background: #111827;
   color: #f8fafc;
 }

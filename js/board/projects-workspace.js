@@ -1,5 +1,6 @@
 ﻿function renderProjects() {
   projectsList.innerHTML = "";
+  projectCount.textContent = String(state.projects.length);
   const projects = [...state.projects].sort((a, b) => {
     if (Boolean(a.favorite) !== Boolean(b.favorite)) return a.favorite ? -1 : 1;
     return (Number(b.modifiedAt) || 0) - (Number(a.modifiedAt) || 0);
@@ -87,9 +88,89 @@
       renameProject(project.id);
     });
 
-    row.append(favoriteButton, selectButton, renameButton, deleteButton);
+    const exportButton = document.createElement("button");
+    exportButton.type = "button";
+    exportButton.className = "export-project";
+    exportButton.title = "Export or import project files";
+    exportButton.textContent = "Export";
+    exportButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openProjectFilesDialog(project.id);
+    });
+
+    row.append(favoriteButton, selectButton, exportButton, renameButton, deleteButton);
     projectsList.append(row);
   });
+}
+
+function openProjectFilesDialog(projectId) {
+  const project = state.projects.find((candidate) => candidate.id === projectId);
+  if (!project) return;
+  if (state.activeProjectId !== projectId) switchActiveProject(projectId);
+  document.querySelector(".project-files-backdrop")?.remove();
+
+  const backdrop = document.createElement("div");
+  backdrop.className = "delete-confirm-backdrop project-files-backdrop";
+  backdrop.innerHTML = `
+    <section class="delete-confirm-dialog project-files-dialog" role="dialog" aria-modal="true" aria-labelledby="project-files-title">
+      <div class="delete-confirm-icon project-files-icon" aria-hidden="true">↓</div>
+      <div class="delete-confirm-copy">
+        <p class="eyebrow">Project files</p>
+        <h2 id="project-files-title">Download ${escapeHtml(project.name)}</h2>
+        <p>Choose the file type you want to download.</p>
+      </div>
+      <div class="project-export-options">
+        <button type="button" data-export-kind="png"><strong>Board PNG</strong><span>Image of the visual board</span></button>
+        <button type="button" data-export-kind="report"><strong>Project report</strong><span>Complete printable project</span></button>
+        <button type="button" data-export-kind="json"><strong>Project JSON</strong><span>Complete restorable backup</span></button>
+      </div>
+      <div class="project-import-options">
+        <span>Import data</span>
+        <label>Import JSON<input type="file" data-import-kind="json" accept="application/json,.json" /></label>
+        <label>Import task CSV<input type="file" data-import-kind="csv" accept=".csv,text/csv" /></label>
+      </div>
+      <div class="delete-confirm-actions">
+        <button type="button" class="delete-confirm-cancel">Close</button>
+      </div>
+    </section>
+  `;
+
+  const close = () => {
+    backdrop.remove();
+    document.removeEventListener("keydown", handleKeydown);
+  };
+  const handleKeydown = (event) => {
+    if (event.key === "Escape") close();
+  };
+  const exportActions = {
+    png: exportBoardAsPng,
+    report: exportProjectReportPdf,
+    json: exportProjectJson
+  };
+  backdrop.querySelectorAll("[data-export-kind]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const action = exportActions[button.dataset.exportKind];
+      close();
+      action?.();
+    });
+  });
+  backdrop.querySelector('[data-import-kind="json"]').addEventListener("change", (event) => {
+    const file = event.target.files[0];
+    close();
+    if (file) importProjectJsonFile(file);
+  });
+  backdrop.querySelector('[data-import-kind="csv"]').addEventListener("change", (event) => {
+    const file = event.target.files[0];
+    close();
+    if (file) importTasksCsvFile(file);
+  });
+  backdrop.addEventListener("click", (event) => {
+    if (event.target === backdrop) close();
+  });
+  backdrop.querySelector(".delete-confirm-cancel").addEventListener("click", close);
+  document.addEventListener("keydown", handleKeydown);
+  document.body.append(backdrop);
+  backdrop.querySelector("[data-export-kind]").focus();
 }
 
 function formatProjectModified(value) {
@@ -152,8 +233,6 @@ function renderWorkspace() {
     node.className = `board-item ${item.type}`;
     node.classList.toggle("level-document-board", item.type === "ticket" && Boolean(item.levelWorkspaceId));
     node.classList.toggle("level-preview-board", isLevelPreview);
-    node.classList.toggle("caption-open", item.type === "image" && !isLevelPreview && item.captionOpen);
-    node.classList.toggle("caption-collapsed", item.type === "image" && !isLevelPreview && !item.captionOpen);
     node.style.left = `${item.x}px`;
     node.style.top = `${item.y}px`;
     node.style.width = `${item.width}px`;
@@ -370,37 +449,6 @@ function renderWorkspace() {
       img.decoding = "async";
       img.draggable = false;
       node.append(img);
-
-      if (!isLevelPreview) {
-        const captionToggle = document.createElement("button");
-        captionToggle.type = "button";
-        captionToggle.className = "image-caption-toggle";
-        captionToggle.title = item.captionOpen ? "Hide text" : "Show text";
-        captionToggle.setAttribute("aria-label", captionToggle.title);
-        captionToggle.textContent = item.captionOpen ? "^" : "v";
-        captionToggle.addEventListener("pointerdown", (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-        });
-        captionToggle.addEventListener("click", (event) => {
-          event.stopPropagation();
-          selectedBoardItemId = item.id;
-          selectedItemIds = new Set([item.id]);
-          selectedConnectionIds.clear();
-          selectedDrawingIds.clear();
-          const before = structuredClone(item);
-          item.captionOpen = !item.captionOpen;
-          saveState({
-            historyEntry: createHistoryCommand("updateItem", item.id, before, item, {
-              projectId: state.activeProjectId,
-              groupKey: `item:${item.id}:caption`
-            }),
-            forceStep: true
-          });
-          render();
-        });
-        node.append(captionToggle);
-      }
     }
 
     if (item.type === "shape") {
@@ -412,13 +460,12 @@ function renderWorkspace() {
     }
 
     let text = null;
-    if (item.type !== "table") {
+    if (item.type !== "table" && item.type !== "image") {
       text = document.createElement("div");
-      text.className = `item-text ${isLevelPreview ? "level-preview-caption" : item.type === "image" ? "image-caption" : ""} ${item.type === "shape" ? "shape-text" : ""}`;
-      text.classList.toggle("caption-hidden", item.type === "image" && !isLevelPreview && !item.captionOpen);
+      text.className = `item-text ${item.type === "shape" ? "shape-text" : ""}`;
       text.contentEditable = "false";
-      text.dataset.placeholder = isLevelPreview ? "Describe this level board" : boardLike ? "Describe the board" : "Write a caption";
-      text.innerHTML = boardLike ? (item.html || escapeHtml(item.text || "")) : escapeHtml(item.text || "");
+      text.dataset.placeholder = "Describe the board";
+      text.innerHTML = item.html || escapeHtml(item.text || "");
       applyTextStyleToNode(text, getItemTextStyle(item));
       text.addEventListener("pointerdown", (event) => {
         if (spacePressed) return;

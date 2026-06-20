@@ -40,6 +40,7 @@ function renderTasks() {
 }
 
 function createTaskColumnNode(project, column, index, columnCount) {
+  const fixedGameJamColumn = isGameJamProject(project);
   const columnTasks = getFilteredTasksForColumn(project, column.id);
   const columnNode = document.createElement("section");
   columnNode.className = "kanban-column";
@@ -63,18 +64,22 @@ function createTaskColumnNode(project, column, index, columnCount) {
 
   const columnTab = document.createElement("div");
   columnTab.className = "kanban-column-tab";
-  columnTab.draggable = true;
-  columnTab.title = "Drag column";
-  columnTab.setAttribute("aria-label", "Drag column");
+  columnTab.draggable = !fixedGameJamColumn;
+  columnTab.title = fixedGameJamColumn ? "Fixed Game Jam status" : "Drag column";
+  columnTab.setAttribute("aria-label", fixedGameJamColumn ? "Fixed Game Jam status" : "Drag column");
   columnTab.innerHTML = `
     <span class="kanban-tab-grip" aria-hidden="true"></span>
-    <button type="button" class="kanban-tab-delete" title="Delete column" ${columnCount <= 1 ? "disabled" : ""}>x</button>
+    <button type="button" class="kanban-tab-delete" title="Delete column" ${fixedGameJamColumn || columnCount <= 1 ? "disabled" : ""}>x</button>
   `;
   const deleteColumnButton = columnTab.querySelector(".kanban-tab-delete");
   deleteColumnButton.addEventListener("pointerdown", (event) => event.stopPropagation());
   deleteColumnButton.addEventListener("dragstart", (event) => event.preventDefault());
   deleteColumnButton.addEventListener("click", () => deleteTaskColumn(column.id));
   columnTab.addEventListener("dragstart", (event) => {
+    if (fixedGameJamColumn) {
+      event.preventDefault();
+      return;
+    }
     if (event.target.closest(".kanban-tab-delete")) {
       event.preventDefault();
       return;
@@ -104,6 +109,7 @@ function createTaskColumnNode(project, column, index, columnCount) {
     <input type="color" class="kanban-column-color" value="${normalizeHexColor(column.color || "#434bd7", "#434bd7")}" aria-label="Column color" />
   `;
   const colorInput = titleWrap.querySelector(".kanban-column-color");
+  colorInput.disabled = fixedGameJamColumn;
   colorInput.addEventListener("pointerdown", (event) => event.stopPropagation());
   colorInput.addEventListener("click", (event) => event.stopPropagation());
   colorInput.addEventListener("input", () => {
@@ -114,6 +120,7 @@ function createTaskColumnNode(project, column, index, columnCount) {
   titleInput.className = "kanban-column-title";
   titleInput.value = column.title;
   titleInput.setAttribute("aria-label", "Column name");
+  titleInput.readOnly = fixedGameJamColumn;
   titleInput.addEventListener("change", () => updateTaskColumnTitle(column.id, titleInput.value));
   titleInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") titleInput.blur();
@@ -204,9 +211,7 @@ function getFilteredTasks(project) {
       task.description,
       task.deadline,
       getBoardItemName(linkedItem, ""),
-      TASK_PRIORITIES[task.priority],
-      ...(task.tags || []),
-      ...(task.checklist || []).map((item) => item.text)
+      TASK_PRIORITIES[task.priority]
     ].join(" ").toLowerCase();
     return haystack.includes(filters.search);
   });
@@ -221,8 +226,6 @@ function createTaskCardNode(project, task) {
   const members = project.teamRoles || [];
   const assigneeIds = Array.isArray(task.assigneeIds) ? task.assigneeIds : [];
   const progress = clamp(Number(task.progress) || 0, 0, 100);
-  const checklist = Array.isArray(task.checklist) ? task.checklist : [];
-  const checklistDone = checklist.filter((item) => item.done).length;
   const dependencyCount = (task.dependencyIds || []).length;
   const blocked = dependencyCount && !areTaskDependenciesDone(project, task);
   const linkedItem = task.linkedItemId ? project.items?.find((item) => item.id === task.linkedItemId) : null;
@@ -248,18 +251,13 @@ function createTaskCardNode(project, task) {
   const selectedMarkup = selectedMembers.length
     ? selectedMembers.map((member) => `<span class="kanban-person-chip">${escapeHtml(member.name || member.role || "Member")}</span>`).join("")
     : `<span class="kanban-no-team">No people assigned</span>`;
-  const tagMarkup = (task.tags || []).length
-    ? `<div class="kanban-tags">${task.tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}</div>`
-    : "";
   meta.innerHTML = `
     <div class="kanban-card-badges">
       <span class="priority-chip priority-${escapeHtml(task.priority || "medium")}">${escapeHtml(TASK_PRIORITIES[task.priority] || "Medium")}</span>
       ${task.deadline ? `<span class="deadline-chip">${escapeHtml(task.deadline)}</span>` : ""}
-      ${checklist.length ? `<span class="checklist-chip">${checklistDone}/${checklist.length}</span>` : ""}
       ${dependencyCount ? `<span class="dependency-chip ${blocked ? "blocked" : ""}">${blocked ? "Blocked by dependency" : `${dependencyCount} deps`}</span>` : ""}
       ${linkedItem ? `<span class="linked-chip">${escapeHtml(getBoardItemName(linkedItem))}</span>` : ""}
     </div>
-    ${tagMarkup}
     <div class="kanban-progress-summary" aria-label="Progress">
       <span class="kanban-progress-label">${progress}% done</span>
       <span class="kanban-progress-track"><span style="width: ${progress}%"></span></span>
@@ -446,7 +444,7 @@ function previewColumnDrop(columnId, targetColumnId, side) {
 
 function commitTaskColumnDomOrder() {
   const project = getActiveProject();
-  if (!project) return;
+  if (!project || isGameJamProject(project)) return;
   const nextOrder = getTaskColumnDomOrder();
   if (!nextOrder.length || !hasTaskColumnOrderChanged(draggedTaskColumnStartOrder)) return;
   const beforeTasks = structuredClone(project.tasks);
@@ -500,7 +498,7 @@ function warnBlockedTask(task) {
 
 function addTaskColumn(title) {
   const project = getActiveProject();
-  if (!project) return;
+  if (!project || isGameJamProject(project)) return;
   const cleanedTitle = cleanUserText(title, 60, "New status");
   normalizeTaskBoard(project);
   const beforeTasks = structuredClone(project.tasks);
@@ -518,7 +516,7 @@ function addTaskColumn(title) {
 function updateTaskColumnTitle(columnId, title) {
   const project = getActiveProject();
   const column = project?.taskColumns.find((candidate) => candidate.id === columnId);
-  if (!project || !column) return;
+  if (!project || !column || isGameJamProject(project)) return;
   const beforeTasks = structuredClone(project.tasks);
   const beforeColumns = structuredClone(project.taskColumns);
   column.title = cleanUserText(title, 60, "New status");
@@ -528,7 +526,7 @@ function updateTaskColumnTitle(columnId, title) {
 function updateTaskColumnColor(columnId, color) {
   const project = getActiveProject();
   const column = project?.taskColumns.find((candidate) => candidate.id === columnId);
-  if (!project || !column) return;
+  if (!project || !column || isGameJamProject(project)) return;
   const beforeTasks = structuredClone(project.tasks);
   const beforeColumns = structuredClone(project.taskColumns);
   column.color = normalizeHexColor(color, column.color || "#434bd7");
@@ -551,7 +549,7 @@ function moveTaskColumn(columnId, direction) {
 
 async function deleteTaskColumn(columnId) {
   const project = getActiveProject();
-  if (!project) return;
+  if (!project || isGameJamProject(project)) return;
   const columns = getOrderedTaskColumns(project);
   if (columns.length <= 1) return;
   if (!await confirmDangerousAction("Delete this task column? Its cards will move to another column.")) return;
@@ -584,8 +582,6 @@ function addTaskToColumn(columnId, title) {
     assigneeIds: [],
     priority: "medium",
     deadline: "",
-    tags: [],
-    checklist: [],
     linkedItemId: ""
   });
   logProjectEvent("Task created", cleanedTitle);
@@ -687,7 +683,6 @@ function openTaskIssueDialog(taskId) {
   const members = project.teamRoles || [];
   const assigneeIds = Array.isArray(task.assigneeIds) ? task.assigneeIds : [];
   const progress = clamp(Number(task.progress) || 0, 0, 100);
-  const checklist = Array.isArray(task.checklist) ? task.checklist : [];
   const column = columns.find((candidate) => candidate.id === task.columnId) || columns[0];
   const boardItems = (project.items || []).filter((item) =>
     item.type !== "image" || item.levelWorkspaceId || item.boardRole === "level-preview");
@@ -708,6 +703,10 @@ function openTaskIssueDialog(taskId) {
       </div>
       <aside class="task-issue-sidebar">
         <button type="button" class="task-issue-close" aria-label="Close issue">x</button>
+        <div class="task-issue-meta">
+          <span style="--column-color: ${escapeHtml(column?.color || "#434bd7")}"></span>
+          <strong>${escapeHtml(column?.title || "Status")}</strong>
+        </div>
         <div class="task-issue-field">
           <span>Status</span>
           <div class="task-issue-segmented task-issue-status" role="group" aria-label="Task status">
@@ -723,10 +722,6 @@ function openTaskIssueDialog(taskId) {
         <label class="task-issue-field">
           <span>Deadline</span>
           <input class="task-issue-deadline" type="date" value="${escapeHtml(task.deadline || "")}" />
-        </label>
-        <label class="task-issue-field">
-          <span>Tags</span>
-          <input class="task-issue-tags" type="text" value="${escapeHtml((task.tags || []).join(", "))}" placeholder="combat, boss, polish" />
         </label>
         <div class="task-issue-field">
           <span>Linked board element</span>
@@ -766,34 +761,12 @@ function openTaskIssueDialog(taskId) {
             `).join("") : `<span class="kanban-no-team">Add team members first</span>`}
           </div>
         </div>
-        <div class="task-issue-field">
-          <span>Checklist</span>
-          <div class="task-checklist-editor">
-            ${checklist.map((item) => `
-              <label class="task-checklist-row" data-checklist-id="${escapeHtml(item.id)}">
-                <input type="checkbox" ${item.done ? "checked" : ""} />
-                <input type="text" value="${escapeHtml(item.text)}" />
-                <button type="button" title="Remove checklist item">x</button>
-              </label>
-            `).join("")}
-          </div>
-          <button type="button" class="task-checklist-add">+ Checklist item</button>
-        </div>
-        <div class="task-issue-meta">
-          <span style="--column-color: ${escapeHtml(column?.color || "#434bd7")}"></span>
-          <strong>${escapeHtml(column?.title || "Status")}</strong>
-        </div>
         <button type="button" class="task-issue-save">Save issue</button>
       </aside>
     </section>
   `;
 
   const close = () => dialog.remove();
-  const readChecklist = () => Array.from(dialog.querySelectorAll(".task-checklist-row")).map((row) => ({
-    id: row.dataset.checklistId || crypto.randomUUID(),
-    done: row.querySelector("input[type='checkbox']").checked,
-    text: row.querySelector("input[type='text']").value
-  })).filter((item) => cleanUserText(item.text, 120));
   const save = () => {
     const range = dialog.querySelector(".task-issue-progress-range");
     const checkedPeople = Array.from(dialog.querySelectorAll(".task-issue-people input:checked")).map((input) => input.value);
@@ -802,8 +775,6 @@ function openTaskIssueDialog(taskId) {
       description: dialog.querySelector(".task-issue-description").value,
       priority: dialog.querySelector(".task-issue-priority button.active")?.dataset.value || "medium",
       deadline: dialog.querySelector(".task-issue-deadline").value,
-      tags: dialog.querySelector(".task-issue-tags").value,
-      checklist: readChecklist(),
       dependencyIds: Array.from(dialog.querySelectorAll(".task-dependency-editor input:checked")).map((input) => input.value),
       linkedItemId: dialog.querySelector(".task-issue-linked-item button.active")?.dataset.value || "",
       progress: Number(range.value),
@@ -840,23 +811,11 @@ function openTaskIssueDialog(taskId) {
       const button = event.target.closest("button");
       if (!button) return;
       group.querySelectorAll("button").forEach((candidate) => candidate.classList.toggle("active", candidate === button));
+      if (group.classList.contains("task-issue-status")) {
+        dialog.querySelector(".task-issue-meta strong").textContent = button.textContent;
+        dialog.querySelector(".task-issue-meta span").style.setProperty("--column-color", button.style.getPropertyValue("--segment-color") || "#434bd7");
+      }
     });
-  });
-  dialog.querySelector(".task-checklist-add").addEventListener("click", () => {
-    const row = document.createElement("label");
-    row.className = "task-checklist-row";
-    row.dataset.checklistId = crypto.randomUUID();
-    row.innerHTML = `
-      <input type="checkbox" />
-      <input type="text" value="" placeholder="Checklist item" />
-      <button type="button" title="Remove checklist item">x</button>
-    `;
-    row.querySelector("button").addEventListener("click", () => row.remove());
-    dialog.querySelector(".task-checklist-editor").append(row);
-    row.querySelector("input[type='text']").focus();
-  });
-  dialog.querySelectorAll(".task-checklist-row button").forEach((button) => {
-    button.addEventListener("click", () => button.closest(".task-checklist-row")?.remove());
   });
   dialog.querySelector(".task-issue-progress-range").addEventListener("input", (event) => syncProgress(event.target.value));
   dialog.querySelector(".task-issue-progress-number").addEventListener("input", (event) => syncProgress(event.target.value));

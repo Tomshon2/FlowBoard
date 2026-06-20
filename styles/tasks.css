@@ -6,9 +6,7 @@
   container-type: inline-size;
 }
 
-.kanban-filter-bar,
-.kanban-actions-tab,
-.kanban-data-actions {
+.kanban-filter-bar {
   display: grid;
   gap: 8px;
   margin-bottom: 10px;
@@ -35,6 +33,24 @@
   justify-self: stretch;
 }
 
+.app.gamejam-mode .kanban-create-row {
+  display: none;
+}
+
+.app.gamejam-mode .kanban-status-form,
+.app.gamejam-mode .kanban-tab-delete {
+  display: none;
+}
+
+.app.gamejam-mode .kanban-column-tab {
+  cursor: default;
+}
+
+.app.gamejam-mode .kanban-column-title,
+.app.gamejam-mode .kanban-column-color {
+  cursor: default;
+}
+
 .kanban-create-row input,
 .kanban-create-row button {
   min-width: 0;
@@ -57,35 +73,8 @@
   grid-template-columns: minmax(150px, 1fr) repeat(3, minmax(120px, 0.65fr));
 }
 
-.kanban-data-actions {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.kanban-data-actions.hidden {
-  display: none;
-}
-
-.kanban-actions-toggle {
-  justify-self: start;
-  min-height: 38px;
-  border: 1px solid rgba(67, 75, 215, 0.22);
-  border-radius: 8px;
-  background: #ffffff;
-  color: var(--accent-dark);
-  padding: 8px 14px;
-  font-size: 12px;
-  font-weight: 900;
-}
-
-.kanban-actions-toggle::after {
-  content: " v";
-}
-
 .kanban-filter-bar input,
-.kanban-filter-bar select,
-.kanban-actions-toggle,
-.kanban-data-actions button,
-.import-chip {
+.kanban-filter-bar select {
   min-height: 38px;
   border: 1px solid rgba(67, 75, 215, 0.18);
   border-radius: 8px;
@@ -94,27 +83,6 @@
   padding: 8px 10px;
   font-size: 12px;
   font-weight: 900;
-}
-
-.kanban-actions-toggle.active {
-  background: var(--accent);
-  color: #ffffff;
-  border-color: var(--accent);
-}
-
-.kanban-actions-toggle.active::after {
-  content: " ^";
-}
-
-.kanban-data-actions button,
-.import-chip {
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-}
-
-.import-chip input {
-  display: none;
 }
 
 .kanban-board {
@@ -394,8 +362,7 @@
   cursor: default;
 }
 
-.kanban-card-badges,
-.kanban-tags {
+.kanban-card-badges {
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
@@ -403,9 +370,7 @@
 
 .priority-chip,
 .deadline-chip,
-.checklist-chip,
-.linked-chip,
-.kanban-tags span {
+.linked-chip {
   display: inline-flex;
   align-items: center;
   max-width: 100%;
@@ -466,14 +431,48 @@
 }
 
 .dependency-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  min-height: 24px;
+  border: 1px solid rgba(3, 148, 58, 0.24);
+  border-radius: 999px;
   background: #e7f7ef;
   color: #02612a;
+  padding: 4px 9px;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .dependency-chip.blocked {
-  border-color: rgba(207, 63, 47, 0.36);
-  background: rgba(242, 212, 209, 0.22);
-  color: #fca5a5;
+  border-color: rgba(207, 63, 47, 0.42);
+  background: #fff0ee;
+  color: #a52d21;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.62);
+}
+
+.dependency-chip.blocked::before {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #cf3f2f;
+  color: #ffffff;
+  content: "!";
+  font-size: 10px;
+  line-height: 1;
+}
+
+.app.app-dark .dependency-chip.blocked {
+  border-color: rgba(248, 113, 113, 0.5);
+  background: rgba(127, 29, 29, 0.3);
+  color: #fecaca;
+  box-shadow: none;
 }
 
 .kanban-card.link-focus-pulse {
@@ -929,37 +928,6 @@
   gap: 6px;
 }
 
-.task-checklist-editor {
-  display: grid;
-  gap: 7px;
-}
-
-.task-checklist-row {
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) 28px;
-  align-items: center;
-  gap: 8px;
-}
-
-.task-checklist-row input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
-  min-height: 18px;
-  padding: 0;
-}
-
-.task-checklist-row button,
-.task-checklist-add {
-  min-height: 30px;
-  padding: 0 8px;
-  border: 1px solid rgba(67, 75, 215, 0.18);
-  border-radius: 8px;
-  background: white;
-  color: var(--accent-dark);
-  font-size: 12px;
-  font-weight: 900;
-}
-
 .task-dependency-editor {
   display: grid;
   gap: 6px;
@@ -1190,9 +1158,9 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  border-top: 1px solid rgba(67, 75, 215, 0.16);
-  margin-top: 4px;
-  padding: 12px 0 14px;
+  border-bottom: 1px solid rgba(67, 75, 215, 0.16);
+  margin-bottom: 14px;
+  padding: 0 42px 14px 0;
   min-height: 44px;
 }
 

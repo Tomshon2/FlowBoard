@@ -36,7 +36,7 @@
   padding: 5px 9px;
   font-size: 12px;
   font-weight: 900;
-  text-transform: capitalize;
+  text-transform: uppercase;
 }
 
 .workspace-members-list {
@@ -92,7 +92,7 @@
   padding: 4px 7px;
   font-size: 12px;
   font-weight: 900;
-  text-transform: capitalize;
+  text-transform: uppercase;
 }
 
 .workspace-member-remove {
@@ -139,8 +139,8 @@
 }
 
 .app.app-dark .story-sub-button {
-  background: #dce7ff;
-  color: #1d2733;
+  background: #434bd7;
+  color: white;
 }
 
 .app.app-dark .story-sub-button:hover {
@@ -202,7 +202,7 @@
 
 .side-panel .kanban-edit-button,
 .side-panel .kanban-icon-button,
-.side-panel .story-sub-button,
+.side-panel .export-project,
 .side-panel .rename-project,
 .side-panel .phase-controls button,
 .side-panel .phase-task button,
@@ -246,9 +246,6 @@
 .app.app-dark .side-panel .team-role-card textarea,
 .app.app-dark .side-panel .gdd-fields input,
 .app.app-dark .side-panel .gdd-fields textarea,
-.app.app-dark .side-panel .gdd-character-card,
-.app.app-dark .side-panel .gdd-add-character,
-.app.app-dark .side-panel .gdd-character-delete,
 .app.app-dark .side-panel .milestone-name-input,
 .app.app-dark .side-panel .milestone-description,
 .app.app-dark .side-panel .milestone-deadline-input,
@@ -314,26 +311,13 @@
   color: white;
 }
 
+.app.app-dark .projects-panel .counter,
 .app.app-dark .side-panel .counter,
 .app.app-dark .side-panel .timer-label {
   background: #e7ecff;
   color: #101827;
   border: 1px solid rgba(255, 255, 255, 0.42);
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
-}
-
-.app.app-dark .side-panel .kanban-actions-toggle,
-.app.app-dark .side-panel .kanban-data-actions button,
-.app.app-dark .side-panel .import-chip {
-  background: var(--dark-panel-field);
-  color: white;
-  border-color: var(--dark-panel-line);
-}
-
-.app.app-dark .side-panel .kanban-actions-toggle.active {
-  background: var(--accent);
-  color: white;
-  border-color: var(--accent);
 }
 
 .app.app-dark .side-panel .phase-name,
@@ -345,7 +329,7 @@
 }
 
 .app.app-dark .side-panel .kanban-edit-button,
-.app.app-dark .side-panel .story-sub-button,
+.app.app-dark .side-panel .export-project,
 .app.app-dark .side-panel .rename-project {
   background: var(--dark-panel-field);
   color: white;
@@ -459,6 +443,107 @@
   background: #cf3f2f;
   color: #ffffff;
   border-color: #cf3f2f;
+}
+
+.app.app-dark .projects-panel .export-project {
+  background: var(--dark-panel-field);
+  color: #ffffff;
+  border-color: var(--dark-panel-line);
+}
+
+.export-project {
+  min-height: 32px;
+  border: 1px solid rgba(67, 75, 215, 0.22);
+  background: rgba(67, 75, 215, 0.1);
+  color: var(--accent-dark);
+  padding: 0 9px;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.project-files-dialog {
+  width: min(560px, calc(100vw - 32px));
+}
+
+.project-files-icon {
+  background: rgba(67, 75, 215, 0.12);
+  color: var(--accent);
+}
+
+.project-export-options {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.project-export-options button {
+  min-width: 0;
+  min-height: 64px;
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  border: 1px solid rgba(67, 75, 215, 0.22);
+  border-radius: 9px;
+  background: var(--panel-soft);
+  color: var(--ink);
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.project-export-options button:hover {
+  border-color: var(--accent);
+  background: rgba(67, 75, 215, 0.12);
+}
+
+.project-export-options button span,
+.project-import-options > span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.project-import-options {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.project-import-options label {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.project-import-options input {
+  display: none;
+}
+
+body:has(.app.app-dark) .project-export-options button,
+body:has(.app.app-dark) .project-import-options label {
+  border-color: var(--dark-panel-line);
+  background: var(--dark-panel-field);
+  color: #ffffff;
+}
+
+@media (max-width: 520px) {
+  .project-export-options {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .project-import-options {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
 
 .app.app-dark ~ .delete-confirm-backdrop .delete-confirm-dialog,

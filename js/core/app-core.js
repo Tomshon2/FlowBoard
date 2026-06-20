@@ -79,9 +79,11 @@ const authBrandCopy = document.querySelector("#auth-brand-copy");
 const authSubmitBtn = document.querySelector("#auth-submit-btn");
 const passwordRules = document.querySelector("#password-rules");
 const projectsList = document.querySelector("#projects-list");
+const projectCount = document.querySelector("#project-count");
 const projectForm = document.querySelector("#project-form");
 const projectName = document.querySelector("#project-name");
 const projectKind = document.querySelector("#project-kind");
+const projectImportInput = document.querySelector("#project-import-input");
 const activeProjectTitle = document.querySelector("#active-project-title");
 const board = document.querySelector("#board");
 const boardContent = document.querySelector("#board-content");
@@ -99,15 +101,6 @@ const taskSearch = document.querySelector("#task-search");
 const taskFilterPerson = document.querySelector("#task-filter-person");
 const taskFilterStatus = document.querySelector("#task-filter-status");
 const taskFilterPriority = document.querySelector("#task-filter-priority");
-const dataActionsToggle = document.querySelector("#data-actions-toggle");
-const kanbanDataActions = document.querySelector("#kanban-data-actions");
-const exportBoardPngBtn = document.querySelector("#export-board-png-btn");
-const exportBoardPdfBtn = document.querySelector("#export-board-pdf-btn");
-const exportProjectJsonBtn = document.querySelector("#export-project-json-btn");
-const exportProjectReportBtn = document.querySelector("#export-project-report-btn");
-const exportGddPdfBtn = document.querySelector("#export-gdd-pdf-btn");
-const importProjectJsonInput = document.querySelector("#import-project-json-input");
-const importTasksCsvInput = document.querySelector("#import-tasks-csv-input");
 const imageInput = document.querySelector("#image-input");
 const drawTool = document.querySelector("#draw-tool");
 const createColor = document.querySelector("#create-color");
@@ -206,12 +199,11 @@ const storyRootForm = document.querySelector("#story-root-form");
 const storyRootTitle = document.querySelector("#story-root-title");
 const storyTree = document.querySelector("#story-tree");
 const storyCount = document.querySelector("#story-count");
+const levelCount = document.querySelector("#level-count");
+const characterCount = document.querySelector("#character-count");
 const addLevelDesignBoard = document.querySelector("#add-level-design-board");
 const gddConcept = document.querySelector("#gdd-concept");
 const gddGenre = document.querySelector("#gdd-genre");
-const gddCharacterList = document.querySelector("#gdd-character-list");
-const gddAddCharacter = document.querySelector("#gdd-add-character");
-const gddMechanics = document.querySelector("#gdd-mechanics");
 const teamRoleForm = document.querySelector("#team-role-form");
 const teamMemberName = document.querySelector("#team-member-name");
 const teamMemberRole = document.querySelector("#team-member-role");
@@ -280,20 +272,6 @@ taskSearch.addEventListener("input", () => renderTasks());
 taskFilterPerson.addEventListener("change", () => renderTasks());
 taskFilterStatus.addEventListener("change", () => renderTasks());
 taskFilterPriority.addEventListener("change", () => renderTasks());
-dataActionsToggle.addEventListener("click", () => toggleDataActions());
-exportBoardPngBtn.addEventListener("click", () => exportBoardAsPng());
-exportBoardPdfBtn.addEventListener("click", () => exportBoardAsPdf());
-exportProjectJsonBtn.addEventListener("click", () => exportProjectJson());
-exportProjectReportBtn.addEventListener("click", () => exportProjectReportPdf());
-exportGddPdfBtn.addEventListener("click", () => exportGameDesignDocumentPdf());
-importProjectJsonInput.addEventListener("change", (event) => {
-  importProjectJsonFile(event.target.files[0]);
-  importProjectJsonInput.value = "";
-});
-importTasksCsvInput.addEventListener("change", (event) => {
-  importTasksCsvFile(event.target.files[0]);
-  importTasksCsvInput.value = "";
-});
 
 function createProject(name, kind = PROJECT_KIND_GAMEDEV) {
   const cleanName = cleanUserText(name, 80);
@@ -342,8 +320,15 @@ projectForm.addEventListener("submit", (event) => {
   saveAndRender();
 });
 
+projectImportInput.addEventListener("change", async (event) => {
+  const file = event.target.files[0];
+  event.target.value = "";
+  if (file) await importProjectJsonFile(file);
+});
+
 shapeTools.forEach((tool) => {
   tool.addEventListener("click", () => {
+    closeDrawersForBoardSelection();
     if (drawMode) toggleDrawMode();
     setActiveShapeTool(activeShapeTool === tool.dataset.shapeTool ? null : tool.dataset.shapeTool);
     setShapeMenuOpen(false);
@@ -351,9 +336,11 @@ shapeTools.forEach((tool) => {
 });
 shapeMenuToggle.addEventListener("click", (event) => {
   event.stopPropagation();
+  closeDrawersForBoardSelection();
   setShapeMenuOpen(shapeMenu.classList.contains("hidden"));
 });
 drawTool.addEventListener("click", () => {
+  closeDrawersForBoardSelection();
   setActiveShapeTool(null);
   setShapeMenuOpen(false);
   toggleDrawMode();
@@ -368,6 +355,7 @@ templateSelect.addEventListener("change", (event) => {
 });
 boardGridBtn.addEventListener("click", () => toggleBoardGrid());
 boardThemeBtn.addEventListener("click", () => toggleBoardTheme());
+createColor.addEventListener("pointerdown", () => closeDrawersForBoardSelection());
 createColor.addEventListener("input", (event) => {
   createColor.value = normalizeHexColor(event.target.value, ticketColors[0]);
   syncGameJamColorPalette();
@@ -375,6 +363,7 @@ createColor.addEventListener("input", (event) => {
 });
 gameJamColorToggle.addEventListener("click", (event) => {
   event.stopPropagation();
+  closeDrawersForBoardSelection();
   const open = gameJamColorPalette.classList.contains("hidden");
   gameJamColorPalette.classList.toggle("hidden", !open);
   gameJamColorToggle.setAttribute("aria-expanded", String(open));
@@ -494,10 +483,9 @@ storyRootForm.addEventListener("submit", (event) => {
   addStoryNode(null, storyRootTitle.value);
   storyRootTitle.value = "";
 });
-[gddConcept, gddGenre, gddMechanics].forEach((field) => {
+[gddConcept, gddGenre].forEach((field) => {
   field.addEventListener("change", () => saveGddFields());
 });
-gddAddCharacter.addEventListener("click", () => addGddCharacter());
 
 teamRoleForm.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -524,14 +512,5 @@ taskColumnForm.addEventListener("submit", (event) => {
   addTaskColumn(title);
   taskColumnTitle.value = "";
 });
-}
-
-function toggleDataActions(forceOpen) {
-  const isOpen = typeof forceOpen === "boolean"
-    ? forceOpen
-    : kanbanDataActions.classList.contains("hidden");
-  kanbanDataActions.classList.toggle("hidden", !isOpen);
-  dataActionsToggle.classList.toggle("active", isOpen);
-  dataActionsToggle.setAttribute("aria-expanded", String(isOpen));
 }
 

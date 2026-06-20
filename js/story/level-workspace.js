@@ -138,7 +138,7 @@ function pasteActiveLevelDocument() {
   const documentHeight = getLevelDocumentHeight(documentText);
   const preview = addBoardItem("image", {
     name: `${level.name} level board`, text: `${level.name} level board`, src: createLevelBoardPreview(level),
-    x: position.x, y: position.y, width: 540, height: 330, captionOpen: true,
+    x: position.x, y: position.y, width: 540, height: 330,
     color: "#f8fafc", boardRole: "level-preview", levelPreviewTitle: level.name, levelWorkspaceId: level.id
   }, { forceHistoryStep: true });
   addBoardItem("ticket", {
@@ -157,8 +157,10 @@ function renderLevelWorkspaces() {
   const project = getActiveProject();
   levelWorkspaceTabs.innerHTML = "";
   levelWorkspaceView.innerHTML = "";
+  levelCount.textContent = "0";
   if (!project) return;
   normalizeLevelWorkspaces(project);
+  levelCount.textContent = String(project.levelWorkspaces.length);
   project.levelWorkspaces.forEach((level) => {
     const tab = document.createElement("button");
     tab.type = "button"; tab.className = "level-workspace-tab"; tab.classList.toggle("active", level.id === project.activeLevelWorkspaceId);

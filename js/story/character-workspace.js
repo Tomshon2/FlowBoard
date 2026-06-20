@@ -85,9 +85,11 @@ function renderCharacterWorkspaces() {
   if (!characterWorkspaceList) return;
   const project = getActiveProject();
   characterWorkspaceList.innerHTML = "";
+  characterCount.textContent = "0";
   if (!project) return;
   project.gdd ??= {};
   project.gdd.characters = normalizeCharacterWorkspaces(project);
+  characterCount.textContent = String(project.gdd.characters.length);
   if (!project.gdd.characters.length) {
     characterWorkspaceList.innerHTML = '<p class="empty-panel-copy">Create a character to start its design document.</p>';
     return;

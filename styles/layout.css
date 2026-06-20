@@ -177,7 +177,6 @@
 .app.gamejam-mode .template-select,
 .app.gamejam-mode #level-design-drawer-toggle,
 .app.gamejam-mode #character-design-drawer-toggle,
-.app.gamejam-mode #team-drawer-toggle,
 .app.gamejam-mode #milestones-drawer-toggle,
 .app.gamejam-mode #history-drawer-toggle {
   display: none;
@@ -671,6 +670,7 @@
 
 .brand-actions {
   display: flex;
+  align-items: center;
   gap: 8px;
 }
 
@@ -802,6 +802,10 @@
   font-weight: 900;
 }
 
+.side-panel .section-title h2 {
+  text-transform: uppercase;
+}
+
 .collapse-button {
   width: 34px;
   min-height: 34px;
@@ -832,6 +836,68 @@
   padding: 0 10px;
 }
 
+#project-form {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(104px, 120px) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+#project-form input,
+#project-form select,
+#project-form button {
+  min-width: 0;
+  min-height: 42px;
+  margin: 0;
+}
+
+#project-form input,
+#project-form select {
+  width: 100%;
+}
+
+#project-form button {
+  padding-inline: 12px;
+  white-space: nowrap;
+}
+
+.import-project-button {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.import-project-button:hover {
+  border-color: var(--accent);
+  background: rgba(67, 75, 215, 0.14);
+}
+
+.import-project-button:focus-within {
+  outline: 2px solid rgba(67, 75, 215, 0.32);
+  outline-offset: 2px;
+}
+
+.import-project-button input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .projects-list,
 .tasks-list {
   display: grid;
@@ -843,7 +909,7 @@
   border-radius: 8px;
   background: var(--panel-soft);
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) auto auto;
+  grid-template-columns: 34px minmax(0, 1fr) auto auto auto;
   align-items: center;
   gap: 6px;
   overflow: hidden;
@@ -1078,5 +1144,43 @@
   height: 100%;
   opacity: 0;
   cursor: pointer;
+}
+
+/* Interface copy is uppercase; user-created content keeps its original casing. */
+button,
+label,
+summary,
+legend,
+h3,
+.section-copy h2,
+.auth-card h2,
+.auth-intro h1,
+.brand-identity h2,
+.task-issue-field > span,
+.code-pane-title,
+.code-analysis-title,
+.counter {
+  text-transform: uppercase;
+}
+
+input,
+textarea,
+select,
+[contenteditable="true"],
+.project-select .project-name,
+.code-file-tab,
+.level-workspace-tab,
+.properties-linked-task-open,
+.task-issue-status button,
+.task-issue-link-options button,
+.character-links label,
+.task-dependency-row,
+.kanban-people-option {
+  text-transform: none;
+}
+
+input::placeholder,
+textarea::placeholder {
+  text-transform: uppercase;
 }
 

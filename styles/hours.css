@@ -39,8 +39,25 @@
   background: #eef2f6;
   color: var(--ink);
   padding: 5px 9px;
-  font-size: 13px;
   font-weight: 700;
+}
+
+.timer-label {
+  font-size: 13px;
+}
+
+.counter {
+  font-size: 26px;
+  line-height: 1;
+}
+
+#task-count {
+  text-transform: uppercase;
+}
+
+#hours-total-label {
+  font-size: 26px;
+  line-height: 1;
 }
 
 .hours-input-row {

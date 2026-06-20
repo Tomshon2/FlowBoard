@@ -1,21 +1,23 @@
 # FlowBoard
 
-FlowBoard is a visual collaborative planning tool for small game-development teams. It combines a freeform board, project tasks, hour planning, game story notes, and team roles in one shared workspace.
+FlowBoard is a visual collaborative planning tool for small game-development teams. It combines a freeform board, project tasks, hour planning, game documentation, characters, levels, code, and team roles in one shared workspace. Projects can use the full Game Dev mode or the completed reduced Game Jam workflow.
 
 ## Main Features
 
 - User accounts through Supabase Auth.
 - Shared workspaces with invite links.
 - Visual boards with cards, shapes, drawings, images, and connections.
-- Kanban-style task columns and task issue details.
-- Task priorities, deadlines, tags, checklists, filters, and board-element links.
+- Kanban-style task columns and task issue details with priorities, deadlines, progress, dependencies, people, filters, and board-element links.
+- Game Jam Actions board with fixed To do, In progress, and Done columns and in-column task creation.
 - Project-hour planning by phase and task.
-- Game story sections with nested subdivisions.
+- GDD fields and game story sections with nested subdivisions.
+- Character profiles with images, story, personality, abilities, notes, and board links.
+- Level Design workspaces with notes, images, freehand painting, documentation, and main-board previews.
 - Team role notes and task assignees.
-- Per-project code workspace with file import, editing, download, and local analysis.
+- Per-project code workspace with saved/draft comparison, syntax highlighting, line diff, confirmed apply, import, download, and local analysis.
 - Realtime board updates and live cursors through Supabase.
 - Image upload through Supabase Storage when configured.
-- Project/task export and import through JSON, CSV, PNG, and printable PDF reports.
+- Complete project JSON backup/import, task CSV import, themed board PNG export, and printable project reports. Game Jam reports omit Code files and Milestones.
 
 ## Technologies
 

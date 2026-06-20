@@ -16,6 +16,9 @@
 .gdd-fields label {
   display: grid;
   gap: 6px;
+}
+
+.gdd-fields label {
   color: var(--muted);
   font-size: 11px;
   font-weight: 900;
@@ -27,52 +30,10 @@
   resize: vertical;
 }
 
-.gdd-character-list {
-  display: grid;
-  gap: 8px;
-}
-
-.gdd-empty {
-  margin: 0;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 800;
-  text-transform: none;
-}
-
-.gdd-character-card {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 30px;
-  gap: 7px;
-  border: 1px solid rgba(67, 75, 215, 0.18);
-  border-radius: 8px;
-  background: #ffffff;
-  padding: 8px;
-}
-
-.gdd-character-description {
-  grid-column: 1 / -1;
-}
-
-.gdd-character-delete,
-.gdd-add-character {
-  min-height: 34px;
-  border: 1px solid rgba(67, 75, 215, 0.18);
-  border-radius: 8px;
-  background: #ffffff;
-  color: var(--accent-dark);
-  font-size: 12px;
-  font-weight: 900;
-}
-
-.gdd-character-delete {
-  width: 30px;
-  min-height: 30px;
-  padding: 0;
-}
-
-.gdd-add-character {
-  width: 100%;
+.app.gamejam-mode #story-panel #story-root-form,
+.app.gamejam-mode #story-panel #story-tree,
+.app.gamejam-mode #story-panel #story-count {
+  display: none;
 }
 
 .story-node {
@@ -102,8 +63,8 @@
 }
 
 .story-sub-button {
-  background: #eeedff;
-  color: var(--accent-dark);
+  background: #434bd7;
+  color: white;
 }
 
 .story-sub-button:hover {

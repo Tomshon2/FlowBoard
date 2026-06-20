@@ -60,13 +60,7 @@ function renderTeamRoles() {
   const members = project?.teamRoles || [];
   teamCount.textContent = String(members.length);
   if (!project) return;
-  if (!members.length) {
-    const empty = document.createElement("p");
-    empty.className = "empty-panel-copy";
-    empty.textContent = "Add roles for design, art, code, audio, QA, production...";
-    teamRoleList.append(empty);
-    return;
-  }
+  if (!members.length) return;
 
   members.forEach((member) => {
     const row = document.createElement("article");

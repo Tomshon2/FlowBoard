@@ -178,9 +178,9 @@ function inferGddSections(project) {
   const conceptItem = (project.items || []).find((item) => /concept|game|idea|pitch/i.test(`${item.text || ""} ${item.html || ""}`));
   const mechanics = (project.tasks || []).filter((task) => /mechanic|gameplay|combat|movement|enemy|boss/i.test(`${task.title} ${task.description || ""}`));
   const assets = (project.items || []).filter((item) => item.type === "image");
-  const characters = typeof normalizeGddCharacters === "function"
-    ? normalizeGddCharacters(project.gdd || {})
-    : [];
+  const characters = typeof normalizeCharacterWorkspaces === "function"
+    ? normalizeCharacterWorkspaces({ gdd: project.gdd || {} })
+    : Array.isArray(project.gdd?.characters) ? project.gdd.characters : [];
   return {
     gameName: project.name || "Untitled game",
     concept: project.gdd?.concept || conceptItem?.text || conceptItem?.html?.replace(/<[^>]*>/g, " ").trim() || "Define the core concept.",

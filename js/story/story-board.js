@@ -37,12 +37,12 @@ function saveGddFields() {
   const project = getActiveProject();
   if (!project) return;
   const before = { gdd: structuredClone(project.gdd || {}) };
-  project.gdd = {
+  const nextGdd = {
+    ...(project.gdd || {}),
     concept: String(gddConcept.value || "").slice(0, 3000),
-    genre: cleanUserText(gddGenre.value, 120, ""),
-    characters: readGddCharacters(),
-    mechanics: String(gddMechanics.value || "").slice(0, 3000)
+    genre: cleanUserText(gddGenre.value, 120, "")
   };
+  project.gdd = nextGdd;
   saveState({
     historyEntry: createHistoryCommand("updateProject", project.id, before, {
       gdd: structuredClone(project.gdd)
@@ -50,110 +50,9 @@ function saveGddFields() {
   });
 }
 
-function normalizeGddCharacters(gdd = {}) {
-  if (typeof normalizeCharacterWorkspaces === "function") return normalizeCharacterWorkspaces({ gdd });
-  const legacyText = String(gdd.characters || "").trim();
-  return legacyText
-    ? [{ id: crypto.randomUUID(), name: "Character", description: legacyText.slice(0, 1200) }]
-    : [];
-}
-
-function readGddCharacters() {
-  const project = getActiveProject();
-  const existing = new Map(normalizeGddCharacters(project?.gdd).map((character) => [character.id, character]));
-  return Array.from(gddCharacterList.querySelectorAll(".gdd-character-card")).map((card) => ({
-    ...(existing.get(card.dataset.characterId) || {}),
-    id: card.dataset.characterId || crypto.randomUUID(),
-    name: cleanUserText(card.querySelector(".gdd-character-name")?.value, 100, "Character"),
-    story: String(card.querySelector(".gdd-character-description")?.value || "").slice(0, 5000)
-  })).filter((character) => character.name || character.story);
-}
-
-function addGddCharacter(character = {}) {
-  const project = getActiveProject();
-  if (!project) return;
-  project.gdd ??= {};
-  const before = { gdd: structuredClone(project.gdd) };
-  const characters = normalizeGddCharacters(project.gdd);
-  characters.push({
-    id: crypto.randomUUID(),
-    name: cleanUserText(character.name, 100, "New character"),
-    image: "", story: String(character.story || character.description || "").slice(0, 5000),
-    personality: "", abilities: "", notes: "", linkedItemIds: []
-  });
-  project.gdd.characters = characters;
-  saveState({
-    historyEntry: createHistoryCommand("updateProject", project.id, before, {
-      gdd: structuredClone(project.gdd)
-    }, { projectId: project.id, groupKey: `project:${project.id}:gdd:characters` })
-  });
-  renderStory();
-  renderCharacterWorkspaces();
-}
-
-function updateGddCharacter(characterId, patch) {
-  const project = getActiveProject();
-  if (!project) return;
-  project.gdd ??= {};
-  const characters = normalizeGddCharacters(project.gdd);
-  const character = characters.find((candidate) => candidate.id === characterId);
-  if (!character) return;
-  const before = { gdd: structuredClone(project.gdd) };
-  if (Object.prototype.hasOwnProperty.call(patch, "name")) character.name = cleanUserText(patch.name, 100, "Character");
-  if (Object.prototype.hasOwnProperty.call(patch, "description")) character.story = String(patch.description || "").slice(0, 5000);
-  project.gdd.characters = characters;
-  saveState({
-    historyEntry: createHistoryCommand("updateProject", project.id, before, {
-      gdd: structuredClone(project.gdd)
-    }, { projectId: project.id, groupKey: `project:${project.id}:gdd:characters:${characterId}` })
-  });
-  renderCharacterWorkspaces();
-}
-
-async function deleteGddCharacter(characterId) {
-  const project = getActiveProject();
-  if (!project) return;
-  if (!await confirmDangerousAction("Delete this character?")) return;
-  project.gdd ??= {};
-  const before = { gdd: structuredClone(project.gdd) };
-  project.gdd.characters = normalizeGddCharacters(project.gdd).filter((character) => character.id !== characterId);
-  saveState({
-    historyEntry: createHistoryCommand("updateProject", project.id, before, {
-      gdd: structuredClone(project.gdd)
-    }, { projectId: project.id, groupKey: `project:${project.id}:gdd:characters` })
-  });
-  renderStory();
-  renderCharacterWorkspaces();
-}
-
-function renderGddCharacters(characters) {
-  gddCharacterList.innerHTML = "";
-  if (!characters.length) {
-    const empty = document.createElement("p");
-    empty.className = "gdd-empty";
-    empty.textContent = "No characters yet.";
-    gddCharacterList.append(empty);
-    return;
-  }
-  characters.forEach((character) => {
-    const card = document.createElement("article");
-    card.className = "gdd-character-card";
-    card.dataset.characterId = character.id;
-    card.innerHTML = `
-      <input class="gdd-character-name" type="text" maxlength="100" value="${escapeHtml(character.name)}" placeholder="Character name" />
-      <button class="gdd-character-delete" type="button" title="Remove character">x</button>
-      <textarea class="gdd-character-description" rows="3" placeholder="Story / description">${escapeHtml(character.story || character.description || "")}</textarea>
-    `;
-    card.querySelector(".gdd-character-name").addEventListener("change", (event) => updateGddCharacter(character.id, { name: event.target.value }));
-    card.querySelector(".gdd-character-description").addEventListener("change", (event) => updateGddCharacter(character.id, { description: event.target.value }));
-    card.querySelector(".gdd-character-delete").addEventListener("click", () => deleteGddCharacter(character.id));
-    gddCharacterList.append(card);
-  });
-}
-
 function addStoryNode(parentId, rawTitle) {
   const project = getActiveProject();
-  if (!project) return;
+  if (!project || isGameJamProject(project)) return;
   project.story ??= [];
   const title = cleanUserText(rawTitle, 100, "New story section");
   const beforeStory = structuredClone(project.story);
@@ -179,7 +78,7 @@ function addStoryNode(parentId, rawTitle) {
 
 function updateStoryNode(id, patch) {
   const project = getActiveProject();
-  if (!project) return;
+  if (!project || isGameJamProject(project)) return;
   const node = findStoryNode(project.story || [], id);
   if (!node) return;
   const beforeStory = structuredClone(project.story);
@@ -190,7 +89,7 @@ function updateStoryNode(id, patch) {
 
 async function deleteStoryNode(id) {
   const project = getActiveProject();
-  if (!project) return;
+  if (!project || isGameJamProject(project)) return;
   if (!await confirmDangerousAction("Delete this story section and its subdivisions?")) return;
   const beforeStory = structuredClone(project.story || []);
   if (!removeStoryNode(project.story, id)) return;
@@ -202,14 +101,12 @@ function renderStory() {
   const project = getActiveProject();
   storyTree.innerHTML = "";
   const nodes = project?.story || [];
-  storyCount.textContent = String(countStoryNodes(nodes));
+  storyCount.textContent = isGameJamProject(project) ? "0" : String(countStoryNodes(nodes));
   if (!project) return;
   project.gdd ??= {};
-  project.gdd.characters = normalizeGddCharacters(project.gdd);
   gddConcept.value = project.gdd.concept || "";
   gddGenre.value = project.gdd.genre || "";
-  gddMechanics.value = project.gdd.mechanics || "";
-  renderGddCharacters(project.gdd.characters);
+  if (isGameJamProject(project)) return;
   if (!nodes.length) {
     const empty = document.createElement("p");
     empty.className = "empty-panel-copy";

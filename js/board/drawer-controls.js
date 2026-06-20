@@ -70,6 +70,7 @@ function togglePanel(panel, button) {
 let sidePanelLayoutSettlesAt = 0;
 
 function toggleDrawer(drawer) {
+  deactivateBoardCreationTools();
   clearSelection();
   const className = drawer === "workspace" ? "workspace-open" : "side-open";
   window.clearTimeout(drawerSwitchTimer);
@@ -141,10 +142,11 @@ function syncDrawerButtons() {
 
 function getAllowedSidePanel(panelName) {
   if (!isGameJamProject()) return panelName;
-  return ["hours", "tasks", "code", "story"].includes(panelName) ? panelName : "hours";
+  return ["hours", "tasks", "code", "story", "team"].includes(panelName) ? panelName : "hours";
 }
 
 function toggleSidePanel(panelName) {
+  deactivateBoardCreationTools();
   clearSelection();
   panelName = getAllowedSidePanel(panelName);
   const sideOpen = app.classList.contains("side-open");
@@ -171,6 +173,7 @@ function toggleSidePanel(panelName) {
 }
 
 function openSidePanelFromBoardContext(panelName) {
+  deactivateBoardCreationTools();
   clearSelection();
   openSidePanel(panelName);
 }

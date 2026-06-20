@@ -17,7 +17,9 @@ function normalizeStoryNodes(nodes = []) {
 
 function normalizeTaskBoard(project) {
   const defaultColumns = createDefaultTaskColumns();
-  const incomingColumns = Array.isArray(project.taskColumns) && project.taskColumns.length
+  const incomingColumns = project.kind === PROJECT_KIND_GAMEJAM
+    ? defaultColumns
+    : Array.isArray(project.taskColumns) && project.taskColumns.length
     ? project.taskColumns
     : defaultColumns;
   project.taskColumns = incomingColumns.map((column, index) => ({
@@ -221,7 +223,6 @@ function normalizeState() {
       borderThickness: clamp(Number(item.borderThickness ?? (item.type === "shape" ? 2 : 1)) || 0, 0, 14),
       snapToGrid: item.snapToGrid === true,
       html: item.html || escapeHtml(item.text || ""),
-      captionOpen: item.type === "image" ? Boolean(item.captionOpen) : true,
       textStyle: {
         fontFamily: "Inter",
         fontSize: 16,

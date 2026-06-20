@@ -13,6 +13,14 @@ function setShapeMenuOpen(open) {
   shapeMenuToggle?.setAttribute("aria-expanded", String(open));
 }
 
+function deactivateBoardCreationTools() {
+  if (drawMode) toggleDrawMode();
+  setActiveShapeTool(null);
+  setShapeMenuOpen(false);
+  gameJamColorPalette?.classList.add("hidden");
+  gameJamColorToggle?.setAttribute("aria-expanded", "false");
+}
+
 function syncGameJamColorPalette() {
   if (!gameJamColorToggle || !gameJamColorButtons) return;
   const allowedColors = Array.from(gameJamColorButtons, (button) => normalizeHexColor(button.dataset.gamejamColor, ticketColors[0]));
@@ -317,25 +325,6 @@ function enterItemTextEdit(event, node, item) {
   event?.stopPropagation();
   const text = node?.querySelector(".item-text");
   if (!text) return;
-
-  if (item.type === "image" && !item.captionOpen) {
-    const before = structuredClone(item);
-    item.captionOpen = true;
-    saveState({
-      historyEntry: createHistoryCommand("updateItem", item.id, before, item, {
-        projectId: state.activeProjectId,
-        groupKey: `item:${item.id}:caption`
-      }),
-      forceStep: true
-    });
-    render();
-    window.setTimeout(() => {
-      const nextNode = boardContent.querySelector(`[data-id="${item.id}"]`);
-      const nextItem = getActiveProject()?.items.find((candidate) => candidate.id === item.id);
-      if (nextNode && nextItem) enterItemTextEdit(null, nextNode, nextItem);
-    }, 0);
-    return;
-  }
 
   interactionLock = false;
   board.classList.remove("dragging-board");

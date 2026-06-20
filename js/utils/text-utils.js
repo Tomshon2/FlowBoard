@@ -149,7 +149,10 @@ function getBoardItemName(item, fallback = "Board item") {
   return cleanUserText(item?.name || item?.text || htmlToPlainTextFallback(item?.html), 80, fallback);
 }
 
-function confirmDangerousAction(message) {
+function confirmDangerousAction(message, options = {}) {
+  const eyebrow = cleanUserText(options.eyebrow, 40, "Confirm delete");
+  const title = cleanUserText(options.title, 80, "Delete this?");
+  const confirmLabel = cleanUserText(options.confirmLabel, 32, "Delete");
   return new Promise((resolve) => {
     document.querySelector(".delete-confirm-backdrop")?.remove();
 
@@ -159,13 +162,13 @@ function confirmDangerousAction(message) {
       <section class="delete-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-confirm-title">
         <div class="delete-confirm-icon" aria-hidden="true">!</div>
         <div class="delete-confirm-copy">
-          <p class="eyebrow">Confirm delete</p>
-          <h2 id="delete-confirm-title">Delete this?</h2>
+          <p class="eyebrow">${escapeHtml(eyebrow)}</p>
+          <h2 id="delete-confirm-title">${escapeHtml(title)}</h2>
           <p>${escapeHtml(message)}</p>
         </div>
         <div class="delete-confirm-actions">
           <button type="button" class="delete-confirm-cancel">Cancel</button>
-          <button type="button" class="delete-confirm-delete">Delete</button>
+          <button type="button" class="delete-confirm-delete">${escapeHtml(confirmLabel)}</button>
         </div>
       </section>
     `;
