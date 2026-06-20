@@ -1,0 +1,33 @@
+:root {
+  --ui-density: 0.8;
+}
+
+/* Match an 80% browser UI scale without changing the visual board itself. */
+.auth-shell,
+.topbar,
+.drawer,
+.left-drawer-toggles,
+.properties-panel,
+.delete-confirm-dialog,
+.task-issue-dialog,
+.connection-style-panel,
+.zoom-indicator,
+.item-toolbar {
+  zoom: var(--ui-density);
+}
+
+.auth-shell {
+  min-height: 125vh;
+}
+
+.drawer {
+  bottom: auto;
+  height: 125vh;
+  max-width: calc(125vw - 58px);
+}
+
+@media (max-width: 860px) {
+  .drawer {
+    max-width: calc(125vw - 52px);
+  }
+}

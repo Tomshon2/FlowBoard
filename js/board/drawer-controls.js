@@ -1,8 +1,9 @@
 ﻿function initializeSideDrawerResize() {
   if (!sideDrawer) return;
-  const storageKey = "flowboard-side-drawer-width";
+  const uiDensity = 0.8;
+  const storageKey = "flowboard-side-drawer-width-compact";
   const minDrawerWidth = 365;
-  const getMaxWidth = () => Math.max(minDrawerWidth, window.innerWidth - 58);
+  const getMaxWidth = () => Math.max(minDrawerWidth, (window.innerWidth / uiDensity) - 58);
   const clampDrawerWidth = (width) => clamp(Math.round(width), minDrawerWidth, getMaxWidth());
   const applyWidth = (width) => {
     const drawerWidth = `${clampDrawerWidth(width)}px`;
@@ -21,7 +22,7 @@
     event.preventDefault();
     event.stopPropagation();
     const startX = event.clientX;
-    const startWidth = drawer.getBoundingClientRect().width;
+    const startWidth = drawer.getBoundingClientRect().width / uiDensity;
     document.body.classList.add("resizing-side-drawer");
     try {
       handle.setPointerCapture(event.pointerId);
@@ -30,7 +31,7 @@
     }
 
     const move = (moveEvent) => {
-      const nextWidth = startWidth + (moveEvent.clientX - startX);
+      const nextWidth = startWidth + ((moveEvent.clientX - startX) / uiDensity);
       applyWidth(nextWidth);
     };
 
@@ -39,7 +40,7 @@
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", end);
       window.removeEventListener("pointercancel", end);
-      localStorage.setItem(storageKey, String(clampDrawerWidth(drawer.getBoundingClientRect().width)));
+      localStorage.setItem(storageKey, String(clampDrawerWidth(drawer.getBoundingClientRect().width / uiDensity)));
     };
 
     window.addEventListener("pointermove", move);
@@ -56,7 +57,7 @@
   });
 
   window.addEventListener("resize", () => {
-    const currentWidth = (app.classList.contains("workspace-open") ? projectsDrawer : sideDrawer).getBoundingClientRect().width;
+    const currentWidth = (app.classList.contains("workspace-open") ? projectsDrawer : sideDrawer).getBoundingClientRect().width / uiDensity;
     applyWidth(currentWidth);
   });
 }
