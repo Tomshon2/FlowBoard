@@ -292,17 +292,32 @@ function handleBoardDrop(event) {
   if (isImageLikeUrl(uri)) addImageUrl(uri.trim(), point);
 }
 
+const FLOWBOARD_CLIPBOARD_MIME = "application/x-flowboard-selection";
+const FLOWBOARD_LEGACY_TICKET_MIME = "application/x-flowboard-ticket";
+const FLOWBOARD_CLIPBOARD_VERSION = 2;
+
 function handlePaste(event) {
   const target = event.target;
   if (target?.matches?.("input, textarea, [contenteditable='true']")) return;
   const project = getActiveProject();
-  const ticketJson = event.clipboardData.getData("application/x-flowboard-ticket");
+  const selectionJson = event.clipboardData.getData(FLOWBOARD_CLIPBOARD_MIME);
+  if (selectionJson && project) {
+    event.preventDefault();
+    try {
+      pasteBoardClipboard(JSON.parse(selectionJson), lastBoardPoint);
+    } catch {
+      if (copiedBoardClipboard) pasteBoardClipboard(copiedBoardClipboard, lastBoardPoint);
+    }
+    return;
+  }
+
+  const ticketJson = event.clipboardData.getData(FLOWBOARD_LEGACY_TICKET_MIME);
   if (ticketJson && project) {
     event.preventDefault();
     try {
       pasteTicket(JSON.parse(ticketJson), lastBoardPoint);
     } catch {
-      if (copiedBoardItem) pasteTicket(copiedBoardItem, lastBoardPoint);
+      if (copiedBoardClipboard) pasteBoardClipboard(copiedBoardClipboard, lastBoardPoint);
     }
     return;
   }
@@ -329,9 +344,9 @@ function handlePaste(event) {
     return;
   }
 
-  if (copiedBoardItem && project) {
+  if (copiedBoardClipboard && project) {
     event.preventDefault();
-    pasteTicket(copiedBoardItem, lastBoardPoint);
+    pasteBoardClipboard(copiedBoardClipboard, lastBoardPoint);
   }
 }
 
@@ -339,35 +354,223 @@ function handleCopy(event) {
   const target = event.target;
   if (target?.matches?.("input, textarea, [contenteditable='true']")) return;
   const project = getActiveProject();
-  const item = project?.items.find((candidate) => candidate.id === selectedBoardItemId);
-  if (!item || !["ticket", "shape"].includes(item.type)) return;
+  const packageToCopy = createBoardClipboardPackage(project);
+  if (!packageToCopy) return;
 
   event.preventDefault();
-  copiedBoardItem = structuredClone(item);
-  event.clipboardData.setData("application/x-flowboard-ticket", JSON.stringify(copiedBoardItem));
-  event.clipboardData.setData("text/plain", item.text || "");
+  copiedBoardClipboard = structuredClone(packageToCopy);
+  event.clipboardData.setData(FLOWBOARD_CLIPBOARD_MIME, JSON.stringify(packageToCopy));
+  if (packageToCopy.items.length === 1 && !packageToCopy.drawings.length && !packageToCopy.connections.length) {
+    event.clipboardData.setData(FLOWBOARD_LEGACY_TICKET_MIME, JSON.stringify(packageToCopy.items[0]));
+  }
+  event.clipboardData.setData("text/plain", getBoardClipboardText(packageToCopy));
 }
 
 function pasteTicket(source, point) {
-  const project = getActiveProject();
-  if (!project || !["ticket", "shape"].includes(source.type)) return;
-  const clone = {
-    ...structuredClone(source),
-    id: crypto.randomUUID(),
-    x: Math.max(0, Math.round(point.x)),
-    y: Math.max(0, Math.round(point.y)),
-    connections: undefined
+  pasteBoardClipboard(source, point);
+}
+
+function createBoardClipboardPackage(project) {
+  if (!project) return null;
+  if (typeof pruneSelectionToState === "function") pruneSelectionToState();
+
+  const itemIds = new Set(selectedItemIds);
+  if (!itemIds.size && selectedBoardItemId) itemIds.add(selectedBoardItemId);
+
+  const items = project.items
+    .filter((item) => itemIds.has(item.id))
+    .map((item) => structuredClone(item));
+  const drawings = (project.drawings || [])
+    .filter((drawing) => selectedDrawingIds.has(drawing.id))
+    .map((drawing) => structuredClone(drawing));
+  const copiedItemIds = new Set(items.map((item) => item.id));
+  const connections = project.connections
+    .filter((connection) =>
+      selectedConnectionIds.has(connection.id) ||
+      copiedItemIds.has(connection.from) ||
+      copiedItemIds.has(connection.to))
+    .map((connection) => structuredClone(connection));
+
+  if (!items.length && !drawings.length && !connections.length) return null;
+
+  return {
+    version: FLOWBOARD_CLIPBOARD_VERSION,
+    origin: getBoardClipboardOrigin(project, items, drawings, connections),
+    items,
+    drawings,
+    connections
   };
-  project.items.push(clone);
-  selectedBoardItemId = clone.id;
-  selectedItemIds = new Set([clone.id]);
-  selectedConnectionIds.clear();
-  selectedDrawingIds.clear();
+}
+
+function getBoardClipboardOrigin(project, items = [], drawings = [], connections = []) {
+  const points = [];
+  items.forEach((item) => points.push({ x: Number(item.x) || 0, y: Number(item.y) || 0 }));
+  drawings.forEach((drawing) => {
+    (drawing.points || []).forEach((point) => points.push({ x: Number(point.x) || 0, y: Number(point.y) || 0 }));
+  });
+
+  if (!points.length) {
+    connections.forEach((connection) => {
+      const from = project.items.find((item) => item.id === connection.from);
+      const to = project.items.find((item) => item.id === connection.to);
+      if (from && to) {
+        getConnectionRoute(connection, from, to, project).points.forEach((point) => points.push(point));
+      }
+    });
+  }
+
+  if (!points.length) return { x: 0, y: 0 };
+  return {
+    x: Math.min(...points.map((point) => Number(point.x) || 0)),
+    y: Math.min(...points.map((point) => Number(point.y) || 0))
+  };
+}
+
+function getBoardClipboardText(packageToCopy) {
+  const itemCount = packageToCopy.items.length;
+  const drawingCount = packageToCopy.drawings.length;
+  const connectionCount = packageToCopy.connections.length;
+  if (itemCount === 1 && !drawingCount && !connectionCount) {
+    const item = packageToCopy.items[0];
+    return item.text || getBoardItemName(item, "FlowBoard item");
+  }
+  const parts = [];
+  if (itemCount) parts.push(`${itemCount} board item${itemCount === 1 ? "" : "s"}`);
+  if (drawingCount) parts.push(`${drawingCount} drawing${drawingCount === 1 ? "" : "s"}`);
+  if (connectionCount) parts.push(`${connectionCount} connection${connectionCount === 1 ? "" : "s"}`);
+  return `FlowBoard selection: ${parts.join(", ")}`;
+}
+
+function normalizeBoardClipboardSource(source) {
+  if (!source) return null;
+  if (source.version && (Array.isArray(source.items) || Array.isArray(source.drawings) || Array.isArray(source.connections))) {
+    return {
+      origin: {
+        x: Number(source.origin?.x) || 0,
+        y: Number(source.origin?.y) || 0
+      },
+      items: Array.isArray(source.items) ? source.items.map((item) => structuredClone(item)) : [],
+      drawings: Array.isArray(source.drawings) ? source.drawings.map((drawing) => structuredClone(drawing)) : [],
+      connections: Array.isArray(source.connections) ? source.connections.map((connection) => structuredClone(connection)) : []
+    };
+  }
+  if (source.type) {
+    return {
+      origin: { x: Number(source.x) || 0, y: Number(source.y) || 0 },
+      items: [structuredClone(source)],
+      drawings: [],
+      connections: []
+    };
+  }
+  return null;
+}
+
+function getClipboardPastePoint(point) {
+  return {
+    x: Number.isFinite(point?.x) ? point.x : lastBoardPoint.x,
+    y: Number.isFinite(point?.y) ? point.y : lastBoardPoint.y
+  };
+}
+
+function pasteBoardClipboard(source, point) {
+  const project = getActiveProject();
+  const packageToPaste = normalizeBoardClipboardSource(source);
+  if (!project || !packageToPaste) return;
+
+  const target = getClipboardPastePoint(point);
+  const dx = Math.round(target.x - packageToPaste.origin.x);
+  const dy = Math.round(target.y - packageToPaste.origin.y);
+  const itemIdMap = new Map();
+
+  const clonedItems = packageToPaste.items.map((item) => {
+    const clone = structuredClone(item);
+    const previousId = clone.id;
+    clone.id = crypto.randomUUID();
+    clone.x = Math.round(clamp((Number(item.x) || 0) + dx, 0, 6400 - (item.width || 210)));
+    clone.y = Math.round(clamp((Number(item.y) || 0) + dy, 0, 4200 - (item.height || 140)));
+    delete clone.connections;
+    itemIdMap.set(previousId, clone.id);
+    return clone;
+  });
+
+  const clonedDrawings = packageToPaste.drawings
+    .map((drawing) => ({
+      ...structuredClone(drawing),
+      id: crypto.randomUUID(),
+      points: (drawing.points || []).map((drawingPoint) => ({
+        x: Math.round(clamp((Number(drawingPoint.x) || 0) + dx, 0, 6400)),
+        y: Math.round(clamp((Number(drawingPoint.y) || 0) + dy, 0, 4200))
+      }))
+    }))
+    .filter((drawing) => drawing.points.length);
+
+  project.items.push(...clonedItems);
+  project.drawings ??= [];
+  project.drawings.push(...clonedDrawings);
+
+  const clonedConnections = packageToPaste.connections
+    .map((connection) => cloneConnectionForPaste(connection, itemIdMap, dx, dy, project))
+    .filter(Boolean);
+  project.connections.push(...clonedConnections);
+
+  selectedBoardItemId = clonedItems[0]?.id || null;
+  selectedItemIds = new Set(clonedItems.map((item) => item.id));
+  selectedConnectionIds = new Set(clonedConnections.map((connection) => connection.id));
+  selectedDrawingIds = new Set(clonedDrawings.map((drawing) => drawing.id));
+  const commands = [
+    ...clonedItems.map((item) => createHistoryCommand("createItem", item.id, null, item, { projectId: project.id })),
+    ...clonedDrawings.map((drawing) => createHistoryCommand("createDrawing", drawing.id, null, drawing, { projectId: project.id })),
+    ...clonedConnections.map((connection) => createHistoryCommand("createConnection", connection.id, null, connection, { projectId: project.id }))
+  ];
+  if (!commands.length) return;
   saveState({
-    historyEntry: createHistoryCommand("createItem", clone.id, null, clone, { projectId: project.id }),
+    historyEntry: createBatchHistoryCommand("pasteBoardClipboard", commands, {
+      targetId: commands.map((command) => command.targetId).join(",")
+    }),
     forceStep: true
   });
   render();
+}
+
+function cloneConnectionForPaste(connection, itemIdMap, dx, dy, project) {
+  const fromWasCloned = itemIdMap.has(connection.from);
+  const toWasCloned = itemIdMap.has(connection.to);
+  const clone = structuredClone(connection);
+  clone.id = crypto.randomUUID();
+  clone.from = itemIdMap.get(connection.from) || connection.from;
+  clone.to = itemIdMap.get(connection.to) || connection.to;
+
+  const itemIds = new Set(project.items.map((item) => item.id));
+  if (!itemIds.has(clone.from) || !itemIds.has(clone.to)) return null;
+
+  if (fromWasCloned && toWasCloned) {
+    clone.manualPoints = (clone.manualPoints || []).map((point) => normalizeConnectionPoint({
+      x: (Number(point.x) || 0) + dx,
+      y: (Number(point.y) || 0) + dy
+    }, clone.snapToGrid === true));
+    if (Number.isFinite(Number(clone.bend)) && ["x", "y"].includes(clone.bendAxis)) {
+      const movedBend = Number(clone.bend) + (clone.bendAxis === "x" ? dx : dy);
+      clone.bend = clone.snapToGrid === true
+        ? snapConnectionValueToGrid(movedBend, clone.bendAxis === "x" ? 6400 : 4200)
+        : Math.round(clamp(movedBend, 0, clone.bendAxis === "x" ? 6400 : 4200));
+    }
+    return clone;
+  }
+
+  if (fromWasCloned || toWasCloned) {
+    const from = project.items.find((item) => item.id === clone.from);
+    const to = project.items.find((item) => item.id === clone.to);
+    if (from && to) {
+      clone.fromSide = getAutoSide(getItemCenter(from), getItemCenter(to));
+      clone.toSide = getAutoSide(getItemCenter(to), getItemCenter(from));
+      clone.bendAxis = ["left", "right"].includes(clone.fromSide) ? "x" : "y";
+      clone.manualBend = false;
+      clone.manualPoints = [];
+      clone.bend = getDefaultConnectionBend(clone, project);
+    }
+  }
+
+  return clone;
 }
 
 function getResizeFrameFromSize(origin, direction, width, height) {

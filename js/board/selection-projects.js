@@ -773,6 +773,12 @@ function clearSelection() {
 function handleGlobalKeydown(event) {
   const target = event.target;
   const key = event.key.toLowerCase();
+  if (document.querySelector(".delete-confirm-backdrop")) {
+    if ((event.key === "Delete" || event.key === "Backspace") && !target?.matches?.("input, textarea, [contenteditable='true']")) {
+      event.preventDefault();
+    }
+    return;
+  }
   if (event.code === "Space" && !target?.matches?.("input, textarea, [contenteditable='true']")) {
     spacePressed = true;
     board.classList.add("space-panning");
@@ -800,7 +806,9 @@ function handleGlobalKeydown(event) {
   }
 
   if ((event.key === "Delete" || event.key === "Backspace") && !target?.matches?.("input, textarea, [contenteditable='true']")) {
-    deleteSelection();
+    event.preventDefault();
+    event.stopPropagation();
+    void deleteSelection();
   }
 }
 
@@ -812,11 +820,13 @@ function handleGlobalKeyup(event) {
 
 async function deleteSelection() {
   const project = getActiveProject();
-  if (!project || (!selectedItemIds.size && !selectedConnectionIds.size && !selectedDrawingIds.size && !selectedBoardItemId)) return;
+  if (!project) return;
+  pruneSelectionToState();
+  if (!selectedItemIds.size && !selectedConnectionIds.size && !selectedDrawingIds.size && !selectedBoardItemId) return;
   if (!await confirmDangerousAction("Delete the selected board elements?")) return;
 
   const idsToDelete = new Set(selectedItemIds);
-  if (!idsToDelete.size && selectedBoardItemId) idsToDelete.add(selectedBoardItemId);
+  if (selectedBoardItemId) idsToDelete.add(selectedBoardItemId);
   const beforeSnapshot = getHistorySnapshot();
   const selectedConnectionsBefore = project.connections.filter((connection) => selectedConnectionIds.has(connection.id));
   const selectedDrawingsBefore = (project.drawings || []).filter((drawing) => selectedDrawingIds.has(drawing.id));
